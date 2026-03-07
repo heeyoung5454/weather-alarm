@@ -37,7 +37,7 @@ import { onMounted, ref } from "vue";
 import { useLocation } from "../composables/useLocation";
 import { getRegionName } from "../utils/reverseGeo";
 import { getUltraSrtNcst, getUltraSrtFcst } from "../composables/useWeather";
-import { getBaseDateTime } from "../utils/timeConvert";
+import { getBaseDateTime, getFcstBaseTime } from "../utils/timeConvert";
 
 // 하늘 상태 코드로 아이콘 클래스를 매핑한다.
 const getWeatherIcon = (sky: string) => {
@@ -108,8 +108,10 @@ const fetchWeather = async (lat: number, lng: number) => {
 
     weatherList.value = convertWeatherToObject(ncst);
 
+    const { fctBaseDate, fctBaseTime } = getFcstBaseTime();
+
     // 하늘 정보 조회 하늘상태(SKY), 강수형태(PTY)
-    const fcstData = await getUltraSrtFcst(lat, lng, baseDate, baseTime);
+    const fcstData = await getUltraSrtFcst(lat, lng, fctBaseDate, fctBaseTime);
 
     // fcst 응답 에러 체크
     if (fcstData.response.header.resultCode !== "00") {
