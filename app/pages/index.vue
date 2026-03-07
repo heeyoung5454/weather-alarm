@@ -1,6 +1,12 @@
 <template>
   <main class="page">
     <section class="weather-card">
+      <!-- 로딩 오버레이 -->
+      <div v-if="isLoading" class="loading-overlay">
+        <div class="spinner"></div>
+        <p class="loading-text">날씨 정보를 불러오는 중...</p>
+      </div>
+
       <div class="location-row">
         <span class="gps-icon" aria-hidden="true"></span>
         <p class="location-text">{{ locationText }}</p>
@@ -8,31 +14,21 @@
       <p class="now-time">{{ nowDate }} {{ nowTime }} 기준</p>
       <p v-if="locationError" class="location-error">{{ locationError }}</p>
 
-      <div class="weather-icon" :class="getWeatherIcon(weatherList?.sky?.value)" aria-hidden="true">
-        <template v-if="weatherList?.sky?.value === '1'">
-          <span class="sun-core"></span>
-        </template>
-
-        <template v-else-if="weatherList?.sky?.value === '3'">
-          <span class="cloud cloud-main"></span>
-          <span class="cloud cloud-sub"></span>
-        </template>
-
-        <template v-else-if="weatherList?.sky?.value === '4'">
-          <span class="cloud cloud-main"></span>
-          <span class="drop drop-1"></span>
-          <span class="drop drop-2"></span>
-          <span class="drop drop-3"></span>
-        </template>
-      </div>
+      <!-- 날씨 아이콘 -->
+      <div class="weather-icon" :class="getWeatherIcon(weatherList?.sky?.value)" aria-hidden="true"></div>
 
       <p class="weather-text">{{ weatherError || weatherList?.sky?.text }}</p>
-      <p class="temperature">{{ weatherList?.t1h?.value }}°C</p>
+      <p class="temperature">{{ weatherList?.t1h?.value ? weatherList?.t1h?.value + "°C" : "" }}</p>
     </section>
+
+    <!-- 주간 날씨 -->
+    <WeeklyWeather :lat="position.lat" :lng="position.lng" />
   </main>
 </template>
 
 <script setup lang="ts">
+import WeeklyWeather from "../components/WeeklyWeather.vue";
+
 import { onMounted, ref } from "vue";
 import { useLocation } from "../composables/useLocation";
 import { getRegionName } from "../utils/reverseGeo";
@@ -53,24 +49,36 @@ const locationText = ref("");
 const locationError = ref("");
 // 날씨 API 조회 실패 메시지
 const weatherError = ref("");
+// API 호출 중 로딩 상태
+const isLoading = ref(false);
 // 기준 일시 표기용 상태
 const nowTime = ref("");
 const nowDate = ref("");
 // 가공된 날씨 데이터(SKY, T1H 등)
 const weatherList = ref<Record<string, any>>({});
 
+const position = ref({
+  lat: 0,
+  lng: 0,
+});
+
 // GPS 좌표 조회 함수
 const { getCurrentLocation } = useLocation();
 
 // 페이지 진입 시 GPS/지역명/날씨를 순차 조회한다.
 const updateLocationFromGps = async () => {
+  isLoading.value = true;
   try {
     const coords = await getCurrentLocation();
     const region = await getRegionName(coords.lat, coords.lng);
     locationText.value = `${region.address.city} ${region.address.borough} ${region.address.suburb}`;
     locationError.value = "";
 
-    fetchWeather(coords.lat, coords.lng);
+    position.value = {
+      lat: coords.lat,
+      lng: coords.lng,
+    };
+    fetchWeather(position.value.lat, position.value.lng);
   } catch {
     locationError.value = "위치 권한이 거부되었거나 위치를 가져올 수 없습니다.";
   }
@@ -144,6 +152,8 @@ const fetchWeather = async (lat: number, lng: number) => {
     weatherError.value = "";
   } catch (error) {
     weatherError.value = "날씨정보를 확인할수없습니다";
+  } finally {
+    isLoading.value = false;
   }
 };
 
@@ -199,6 +209,43 @@ onMounted(() => {
   box-shadow: 0 12px 30px #1d4c7a29;
   padding: 28px 24px 32px;
   text-align: center;
+  position: relative;
+}
+
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: #ffffffee;
+  backdrop-filter: blur(6px);
+  border-radius: 24px;
+  z-index: 10;
+}
+
+.spinner {
+  width: 42px;
+  height: 42px;
+  border: 4px solid #d9f0ff;
+  border-top-color: #2c83c9;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-text {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #4c6f8f;
 }
 
 .location-row {
@@ -263,11 +310,15 @@ onMounted(() => {
 }
 
 .icon-sunny {
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: radial-gradient(circle, #ffd866 0%, #ffb646 70%);
-  box-shadow: 0 0 0 10px #ffd15e42, 0 0 36px #ffb03899;
+  background: url("@/assets/images/icon-sunny.png") no-repeat center center / contain;
+}
+
+.icon-cloudy {
+  background: url("@/assets/images/icon-cloudy.png") no-repeat center center / contain;
+}
+
+.icon-rainy {
+  background: url("@/assets/images/icon-rainy.png") no-repeat center center / contain;
 }
 
 .sun-core {
