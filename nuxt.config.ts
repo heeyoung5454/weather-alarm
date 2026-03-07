@@ -4,4 +4,9 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   ssr: false,
   css: ["~/assets/styles/reset.css"],
+  runtimeConfig: {
+    public: {
+      weatherKey: process.env.WEATHER_API_KEY,
+    },
+  },
 });

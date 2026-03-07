@@ -1,3 +1,9 @@
+/**
+ * 지역 이름 조회
+ * @param lat
+ * @param lng
+ * @returns
+ */
 export const getRegionName = async (lat: number, lng: number) => {
   const res: any = await $fetch("https://nominatim.openstreetmap.org/reverse", {
     params: {

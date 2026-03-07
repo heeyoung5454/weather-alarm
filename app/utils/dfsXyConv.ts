@@ -1,0 +1,54 @@
+type ConvertMode = "toXY";
+
+interface GridCoordinates {
+  x: number;
+  y: number;
+}
+
+// 기상청 DFS 위경도 -> 격자 변환
+export const dfs_xy_conv = (code: ConvertMode, v1: number, v2: number): GridCoordinates => {
+  const RE = 6371.00877; // 지구 반경 (km)
+  const GRID = 5.0; // 격자 간격 (km)
+  const SLAT1 = 30.0; // 투영 위도1
+  const SLAT2 = 60.0; // 투영 위도2
+  const OLON = 126.0; // 기준 경도
+  const OLAT = 38.0; // 기준 위도
+  const XO = 43; // 기준 X좌표
+  const YO = 136; // 기준 Y좌표
+
+  const DEGRAD = Math.PI / 180.0;
+
+  const re = RE / GRID;
+  const slat1 = SLAT1 * DEGRAD;
+  const slat2 = SLAT2 * DEGRAD;
+  const olon = OLON * DEGRAD;
+  const olat = OLAT * DEGRAD;
+
+  let sn = Math.tan(Math.PI * 0.25 + slat2 * 0.5) / Math.tan(Math.PI * 0.25 + slat1 * 0.5);
+  sn = Math.log(Math.cos(slat1) / Math.cos(slat2)) / Math.log(sn);
+
+  let sf = Math.tan(Math.PI * 0.25 + slat1 * 0.5);
+  sf = (Math.pow(sf, sn) * Math.cos(slat1)) / sn;
+
+  let ro = Math.tan(Math.PI * 0.25 + olat * 0.5);
+  ro = (re * sf) / Math.pow(ro, sn);
+
+  if (code === "toXY") {
+    let ra = Math.tan(Math.PI * 0.25 + v1 * DEGRAD * 0.5);
+    ra = (re * sf) / Math.pow(ra, sn);
+
+    let theta = v2 * DEGRAD - olon;
+
+    if (theta > Math.PI) theta -= 2.0 * Math.PI;
+    if (theta < -Math.PI) theta += 2.0 * Math.PI;
+
+    theta *= sn;
+
+    return {
+      x: Math.floor(ra * Math.sin(theta) + XO + 0.5),
+      y: Math.floor(ro - ra * Math.cos(theta) + YO + 0.5),
+    };
+  }
+
+  return { x: 0, y: 0 };
+};

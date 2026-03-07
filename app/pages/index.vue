@@ -1,24 +1,24 @@
 <template>
   <main class="page">
     <section class="weather-card">
-      <p class="label">현재 지역 위치</p>
       <div class="location-row">
         <span class="gps-icon" aria-hidden="true"></span>
         <p class="location-text">{{ locationText }}</p>
       </div>
+      <p class="now-time">{{ nowDate }} {{ nowTime }} 기준</p>
       <p v-if="locationError" class="location-error">{{ locationError }}</p>
 
-      <div class="weather-icon" :class="`icon-${weatherData.icon}`" aria-hidden="true">
-        <template v-if="weatherData.icon === 'sunny'">
+      <div class="weather-icon" :class="getWeatherIcon(weatherList?.sky?.value)" aria-hidden="true">
+        <template v-if="weatherList?.sky?.value === '1'">
           <span class="sun-core"></span>
         </template>
 
-        <template v-else-if="weatherData.icon === 'cloudy'">
+        <template v-else-if="weatherList?.sky?.value === '3'">
           <span class="cloud cloud-main"></span>
           <span class="cloud cloud-sub"></span>
         </template>
 
-        <template v-else-if="weatherData.icon === 'rainy'">
+        <template v-else-if="weatherList?.sky?.value === '4'">
           <span class="cloud cloud-main"></span>
           <span class="drop drop-1"></span>
           <span class="drop drop-2"></span>
@@ -26,64 +26,153 @@
         </template>
       </div>
 
-      <p class="weather-text">{{ weatherData.condition }}</p>
-      <p class="temperature">{{ weatherData.temperature }}°C</p>
-
-      <button class="change-button" type="button" @click="cycleWeather">디자인 상태 변경</button>
+      <p class="weather-text">{{ weatherError || weatherList?.sky?.text }}</p>
+      <p class="temperature">{{ weatherList?.t1h?.value }}°C</p>
     </section>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { onMounted, ref } from "vue";
 import { useLocation } from "../composables/useLocation";
 import { getRegionName } from "../utils/reverseGeo";
+import { getUltraSrtNcst, getUltraSrtFcst } from "../composables/useWeather";
+import { getBaseDateTime } from "../utils/timeConvert";
 
-type WeatherIcon = "sunny" | "cloudy" | "rainy";
+// 하늘 상태 코드로 아이콘 클래스를 매핑한다.
+const getWeatherIcon = (sky: string) => {
+  if (sky === "1") return "icon-sunny";
+  if (sky === "3") return "icon-cloudy";
+  if (sky === "4") return "icon-rainy";
+  return "unknown";
+};
 
-interface WeatherData {
-  condition: string;
-  temperature: number;
-  icon: WeatherIcon;
-}
-
-const mockWeatherSet: WeatherData[] = [
-  {
-    condition: "맑음",
-    temperature: 25,
-    icon: "sunny",
-  },
-  {
-    condition: "구름 많음",
-    temperature: 22,
-    icon: "cloudy",
-  },
-  {
-    condition: "비",
-    temperature: 19,
-    icon: "rainy",
-  },
-];
-
-const weatherIndex = ref(0);
-const weatherData = computed(() => mockWeatherSet[weatherIndex.value]);
+// 화면에 표시할 현재 위치 텍스트
 const locationText = ref("");
+// 위치 조회 실패 메시지
 const locationError = ref("");
+// 날씨 API 조회 실패 메시지
+const weatherError = ref("");
+// 기준 일시 표기용 상태
+const nowTime = ref("");
+const nowDate = ref("");
+// 가공된 날씨 데이터(SKY, T1H 등)
+const weatherList = ref<Record<string, any>>({});
+
+// GPS 좌표 조회 함수
 const { getCurrentLocation } = useLocation();
 
+// 페이지 진입 시 GPS/지역명/날씨를 순차 조회한다.
 const updateLocationFromGps = async () => {
   try {
     const coords = await getCurrentLocation();
     const region = await getRegionName(coords.lat, coords.lng);
-    locationText.value = `${region.address.city} ${region.address.borough}`;
+    locationText.value = `${region.address.city} ${region.address.borough} ${region.address.suburb}`;
     locationError.value = "";
+
+    fetchWeather(coords.lat, coords.lng);
   } catch {
     locationError.value = "위치 권한이 거부되었거나 위치를 가져올 수 없습니다.";
   }
 };
 
-const cycleWeather = () => {
-  weatherIndex.value = (weatherIndex.value + 1) % mockWeatherSet.length;
+// 기상청 API 응답을 받아 현재 카드에 필요한 형태로 변환한다.
+const fetchWeather = async (lat: number, lng: number) => {
+  try {
+    const { baseDate, baseTime } = getBaseDateTime();
+
+    nowDate.value = baseDate.slice(4, 6) + "월" + baseDate.slice(6, 8) + "일";
+    nowTime.value = baseTime.slice(0, 2) + "시";
+
+    const data = await getUltraSrtNcst(lat, lng, baseDate, baseTime);
+
+    // ncst 응답 에러 체크
+    if (data.response.header.resultCode !== "00") {
+      weatherError.value = "날씨정보를 확인할수없습니다";
+      return;
+    }
+
+    const ncstItems = data.response.body.items.item;
+
+    // ncstItems가 배열이고 데이터가 있는지 확인
+    if (!Array.isArray(ncstItems) || ncstItems.length === 0) {
+      weatherError.value = "날씨정보를 확인할수없습니다";
+      return;
+    }
+
+    const ncst = {};
+
+    ncstItems.forEach((i) => {
+      ncst[i.category] = i.obsrValue;
+    });
+
+    weatherList.value = convertWeatherToObject(ncst);
+
+    // 하늘 정보 조회 하늘상태(SKY), 강수형태(PTY)
+    const fcstData = await getUltraSrtFcst(lat, lng, baseDate, baseTime);
+
+    // fcst 응답 에러 체크
+    if (fcstData.response.header.resultCode !== "00") {
+      weatherError.value = "날씨정보를 확인할수없습니다";
+      return;
+    }
+
+    const fcstItems = fcstData.response.body.items.item;
+
+    // fcstItems가 배열이고 데이터가 있는지 확인
+    if (!Array.isArray(fcstItems) || fcstItems.length === 0) {
+      weatherError.value = "날씨정보를 확인할수없습니다";
+      return;
+    }
+
+    const fcst = {};
+
+    // SKY, LGT만 필터 + 최신 시간 기준
+    fcstItems.forEach((item) => {
+      if (item.category === "SKY" || item.category === "LGT") {
+        // 아직 값이 없거나, 현재 아이템 fcstTime이 더 최근이면 교체
+        if (!fcst[item.category] || item.fcstTime > fcst[item.category].fcstTime) {
+          fcst[item.category] = item.fcstValue;
+        }
+      }
+    });
+
+    // 정상적으로 데이터를 받았을 때만 화면 업데이트
+    weatherList.value = convertWeatherToObject(ncst, fcst);
+    weatherError.value = "";
+  } catch (error) {
+    weatherError.value = "날씨정보를 확인할수없습니다";
+  }
+};
+
+// 코드값 -> 한글 텍스트 매핑 테이블
+const SKYMap: Record<string, string> = { "1": "맑음", "3": "구름많음", "4": "흐림" };
+const PTYMap: Record<string, string> = {
+  "0": "강수 없음",
+  "1": "비",
+  "2": "비/눈",
+  "3": "눈",
+  "5": "빗방울",
+  "6": "빗방울/눈날림",
+  "7": "눈날림",
+};
+
+// API 원본 응답을 UI에서 바로 쓰는 객체로 변환한다.
+const convertWeatherToObject = (ncstData: Record<string, string>, fcstData?: Record<string, string>) => {
+  const sky = fcstData?.SKY;
+  const pty = ncstData.PTY;
+
+  return {
+    pty: { label: "강수형태", value: pty, text: PTYMap[pty] || "알수없음" },
+    sky: { label: "하늘상태", value: sky, text: SKYMap[sky] || "알수없음" },
+    reh: { label: "습도", value: ncstData.REH, text: `${ncstData.REH}%` },
+    rn1: { label: "1시간강수량", value: ncstData.RN1, text: `${ncstData.RN1} mm` },
+    t1h: { label: "기온", value: ncstData.T1H, text: `${ncstData.T1H}°C` },
+    uuu: { label: "동서바람성분", value: ncstData.UUU, text: `${ncstData.UUU} m/s` },
+    vec: { label: "풍향", value: ncstData.VEC, text: `${ncstData.VEC}°` },
+    vvv: { label: "남북바람성분", value: ncstData.VVV, text: `${ncstData.VVV} m/s` },
+    wsd: { label: "풍속", value: ncstData.WSD, text: `${ncstData.WSD} m/s` },
+  };
 };
 
 onMounted(() => {
@@ -108,12 +197,6 @@ onMounted(() => {
   box-shadow: 0 12px 30px #1d4c7a29;
   padding: 28px 24px 32px;
   text-align: center;
-}
-
-.label {
-  margin: 0 0 8px;
-  color: #4c6f8f;
-  font-size: 14px;
 }
 
 .location-row {
@@ -162,6 +245,12 @@ onMounted(() => {
   margin: 8px 0 0;
   font-size: 12px;
   color: #b34141;
+}
+
+.now-time {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: #6b8399;
 }
 
 .weather-icon {
@@ -253,20 +342,5 @@ onMounted(() => {
 .drop-3 {
   left: 66px;
   top: 68px;
-}
-
-.change-button {
-  margin-top: 18px;
-  border: 0;
-  border-radius: 999px;
-  padding: 10px 14px;
-  background: #2c83c9;
-  color: #fff;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.change-button:hover {
-  background: #206ca8;
 }
 </style>
