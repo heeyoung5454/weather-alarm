@@ -14,7 +14,10 @@ jobs:
         with:
           node-version: "20"
       - run: npm install
-      - run: npm run generate
+      - name: Build with environment variables
+        run: npm run generate
+        env:
+          WEATHER_API_KEY: ${{ secrets.WEATHER_API_KEY }}
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
