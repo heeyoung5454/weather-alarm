@@ -1,28 +1,30 @@
 <template>
   <main class="page">
-    <section class="weather-card">
-      <!-- 로딩 오버레이 -->
-      <div v-if="isLoading" class="loading-overlay">
-        <div class="spinner"></div>
-        <p class="loading-text">날씨 정보를 불러오는 중...</p>
-      </div>
+    <div class="page-content">
+      <section class="weather-card">
+        <!-- 로딩 오버레이 -->
+        <div v-if="isLoading" class="loading-overlay">
+          <div class="spinner"></div>
+          <p class="loading-text">날씨 정보를 불러오는 중...</p>
+        </div>
 
-      <div class="location-row">
-        <span class="gps-icon" aria-hidden="true"></span>
-        <p class="location-text">{{ locationText }}</p>
-      </div>
-      <p class="now-time">{{ nowDate }} {{ nowTime }} 기준</p>
-      <p v-if="locationError" class="location-error">{{ locationError }}</p>
+        <div class="location-row">
+          <span class="gps-icon" aria-hidden="true"></span>
+          <p class="location-text">{{ locationText }}</p>
+        </div>
+        <p class="now-time">{{ nowDate }} {{ nowTime }} 기준</p>
+        <p v-if="locationError" class="location-error">{{ locationError }}</p>
 
-      <!-- 날씨 아이콘 -->
-      <div class="weather-icon" :class="getWeatherIcon(weatherList?.sky?.value)" aria-hidden="true"></div>
+        <!-- 날씨 아이콘 -->
+        <div class="weather-icon" :class="getWeatherIcon(weatherList?.sky?.value)" aria-hidden="true"></div>
 
-      <p class="weather-text">{{ weatherError || weatherList?.sky?.text }}</p>
-      <p class="temperature">{{ weatherList?.t1h?.value ? weatherList?.t1h?.value + "°C" : "" }}</p>
-    </section>
+        <p class="weather-text">{{ weatherError || weatherList?.sky?.text }}</p>
+        <p class="temperature">{{ weatherList?.t1h?.value ? weatherList?.t1h?.value + "°C" : "" }}</p>
+      </section>
 
-    <!-- 주간 날씨 -->
-    <WeeklyWeather :lat="position.lat" :lng="position.lng" />
+      <!-- 주간 날씨 -->
+      <WeeklyWeather :lat="position.lat" :lng="position.lng" />
+    </div>
   </main>
 </template>
 
@@ -195,14 +197,24 @@ onMounted(() => {
 <style scoped>
 .page {
   min-height: 100vh;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: linear-gradient(180deg, #8ed0ff 0%, #d9f0ff 50%, #f6fbff 100%);
   padding: 24px;
+  box-sizing: border-box;
+}
+
+.page-content {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 
 .weather-card {
-  width: min(360px, 100%);
+  width: 100%;
   border-radius: 24px;
   background: #ffffffd9;
   backdrop-filter: blur(4px);
@@ -210,6 +222,7 @@ onMounted(() => {
   padding: 28px 24px 32px;
   text-align: center;
   position: relative;
+  box-sizing: border-box;
 }
 
 .loading-overlay {

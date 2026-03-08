@@ -84,13 +84,14 @@ watch(
 <style scoped>
 .weekly-forecast {
   width: 100%;
-  max-width: 480px;
-  margin: 0 auto;
+  box-sizing: border-box;
 }
 
 .content-wrapper {
   position: relative;
   min-height: 140px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .loading-overlay {
@@ -130,7 +131,7 @@ watch(
 }
 
 .section-title {
-  margin: 0 0 12px 6px;
+  margin: 0 0 12px 2px;
   font-size: 16px;
   font-weight: 700;
   color: #17446d;
@@ -143,6 +144,8 @@ watch(
   overflow-x: auto;
   padding: 4px 2px 12px;
   scroll-snap-type: x mandatory;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .scroll-container::-webkit-scrollbar {
