@@ -140,51 +140,67 @@ watch(
 
 .scroll-container {
   display: flex;
+  flex-direction: column;
   gap: 10px;
-  overflow-x: auto;
-  padding: 4px 2px 12px;
-  scroll-snap-type: x mandatory;
   width: 100%;
   box-sizing: border-box;
 }
 
-.scroll-container::-webkit-scrollbar {
-  height: 6px;
-}
-
-.scroll-container::-webkit-scrollbar-thumb {
-  background: #b8d4eb;
-  border-radius: 999px;
-}
-
-.scroll-container::-webkit-scrollbar-track {
-  background: transparent;
-}
-
 .day-card {
-  flex: 0 0 90px;
+  width: 100%;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 8px;
-  padding: 14px 10px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
   background: #ffffffcc;
   backdrop-filter: blur(4px);
-  border-radius: 16px;
+  border-radius: 12px;
   box-shadow: 0 4px 12px #1d4c7a1a;
-  scroll-snap-align: start;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.day-card:hover {
+  transform: translateX(4px);
+  box-shadow: 0 6px 16px #1d4c7a2a;
+}
+
+@media (max-width: 340px) {
+  .scroll-container {
+    overflow-x: auto;
+  }
+
+  .scroll-container::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .scroll-container::-webkit-scrollbar-thumb {
+    background: #b8d4eb;
+    border-radius: 999px;
+  }
+
+  .scroll-container::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .day-card {
+    min-width: 320px;
+  }
 }
 
 .date {
   margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: #4c6f8f;
+  font-size: 15px;
+  font-weight: 700;
+  color: #17446d;
+  min-width: 60px;
 }
 
 .day-icon {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
 }
 
@@ -202,9 +218,11 @@ watch(
 
 .temp-range {
   display: flex;
-  gap: 6px;
-  font-size: 15px;
+  gap: 8px;
+  font-size: 16px;
   font-weight: 700;
+  min-width: 80px;
+  justify-content: center;
 }
 
 .temp-max {
@@ -217,8 +235,11 @@ watch(
 
 .pop {
   margin: 0;
-  font-size: 11px;
+  font-size: 13px;
   color: #5a7a94;
   font-weight: 600;
+  min-width: 50px;
+  text-align: right;
 }
+
 </style>
