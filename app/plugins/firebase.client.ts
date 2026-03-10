@@ -1,7 +1,8 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
+import { getMessaging, isSupported } from "firebase/messaging";
 
-export default defineNuxtPlugin(() => {
+export default defineNuxtPlugin(async () => {
   const firebaseConfig = {
     apiKey: "AIzaSyDnqS310rQOzSdMFcP2vzTDHmCWQ6MutFI",
     authDomain: "weatheralarm-155bf.firebaseapp.com",
@@ -15,9 +16,16 @@ export default defineNuxtPlugin(() => {
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
 
+  let messaging = null;
+
+  if (await isSupported()) {
+    messaging = getMessaging(app);
+  }
+
   return {
     provide: {
       db,
+      messaging,
     },
   };
 });
