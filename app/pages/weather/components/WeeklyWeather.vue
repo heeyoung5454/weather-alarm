@@ -32,9 +32,9 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 
-import { getVilageFcst } from "../composables/useWeather";
-import { getVilageFcstBaseDateTime } from "../utils/timeConvert";
-import { groupByDate, summarizeDay } from "../utils/forecast";
+import { getVilageFcst } from "@/composables/useWeather";
+import { getVilageFcstBaseDateTime } from "@/utils/timeConvert";
+import { groupByDate, summarizeDay } from "@/utils/forecast";
 
 const props = defineProps<{
   lat: number;
