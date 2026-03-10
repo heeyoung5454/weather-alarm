@@ -9,17 +9,22 @@
         <p class="loading-text">주간 예보를 불러오는 중...</p>
       </div>
 
-      <div class="scroll-container">
-      <article v-for="day in weeklyWeather" :key="day.date" class="day-card">
-        <p class="date">{{ formatDate(day.date) }}</p>
-        <div class="day-icon" :class="getWeatherIconClass(day.sky)"></div>
-        <div class="temp-range">
-          <span class="temp-max">{{ day.maxTemp }}°</span>
-          <span class="temp-min">{{ day.minTemp }}°</span>
-        </div>
-        <p class="pop">💧 {{ day.pop }}%</p>
-      </article>
-    </div>
+      <!-- 위치 에러 메시지 -->
+      <div v-if="props.locationError" class="error-message">
+        {{ props.locationError }}
+      </div>
+
+      <div v-if="!props.locationError" class="scroll-container">
+        <article v-for="day in weeklyWeather" :key="day.date" class="day-card">
+          <p class="date">{{ formatDate(day.date) }}</p>
+          <div class="day-icon" :class="getWeatherIconClass(day.sky)"></div>
+          <div class="temp-range">
+            <span class="temp-max">{{ day.maxTemp }}°</span>
+            <span class="temp-min">{{ day.minTemp }}°</span>
+          </div>
+          <p class="pop">💧 {{ day.pop }}%</p>
+        </article>
+      </div>
     </div>
   </section>
 </template>
@@ -34,6 +39,7 @@ import { groupByDate, summarizeDay } from "../utils/forecast";
 const props = defineProps<{
   lat: number;
   lng: number;
+  locationError: string;
 }>();
 
 const weeklyWeather = ref([]);
@@ -72,12 +78,21 @@ const fetchWeeklyWeather = async (lat: number, lng: number) => {
 };
 
 watch(
-  () => [props.lat, props.lng],
+  () => [props.lat, props.lng, props.locationError],
   () => {
+    // 위치 에러가 있으면 로딩 해제
+    if (props.locationError) {
+      isLoading.value = false;
+      return;
+    }
+
+    // 위치 정보가 있으면 주간 날씨 조회
     if (props.lat && props.lng) {
+      isLoading.value = true;
       fetchWeeklyWeather(props.lat, props.lng);
     }
-  }
+  },
+  { immediate: true }
 );
 </script>
 
@@ -89,7 +104,7 @@ watch(
 
 .content-wrapper {
   position: relative;
-  min-height: 140px;
+  min-height: 380px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -130,6 +145,18 @@ watch(
   color: #4c6f8f;
 }
 
+.error-message {
+  padding: 20px 16px;
+  background: #ffffffcc;
+  backdrop-filter: blur(4px);
+  border-radius: 12px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #6b7280;
+  box-sizing: border-box;
+}
+
 .section-title {
   margin: 0 0 12px 2px;
   font-size: 16px;
@@ -158,7 +185,9 @@ watch(
   backdrop-filter: blur(4px);
   border-radius: 12px;
   box-shadow: 0 4px 12px #1d4c7a1a;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
   box-sizing: border-box;
 }
 
@@ -241,5 +270,4 @@ watch(
   min-width: 50px;
   text-align: right;
 }
-
 </style>

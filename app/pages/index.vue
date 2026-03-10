@@ -8,22 +8,29 @@
           <p class="loading-text">날씨 정보를 불러오는 중...</p>
         </div>
 
-        <div class="location-row">
-          <span class="gps-icon" aria-hidden="true"></span>
-          <p class="location-text">{{ locationText }}</p>
+        <!-- 위치 에러 메시지 -->
+        <div v-if="locationError" class="location-error-full">
+          {{ locationError }}
         </div>
-        <p class="now-time">{{ nowDate }} {{ nowTime }} 기준</p>
-        <p v-if="locationError" class="location-error">{{ locationError }}</p>
 
-        <!-- 날씨 아이콘 -->
-        <div class="weather-icon" :class="getWeatherIcon(weatherList?.sky?.value)" aria-hidden="true"></div>
+        <!-- 날씨 정보 (위치 에러가 없을 때만 표시) -->
+        <template v-if="!locationError">
+          <div class="location-row">
+            <span class="gps-icon" aria-hidden="true"></span>
+            <p class="location-text">{{ locationText }}</p>
+          </div>
+          <p class="now-time">{{ nowDate }} {{ nowTime }} 기준</p>
 
-        <p class="weather-text">{{ weatherError || weatherList?.sky?.text }}</p>
-        <p class="temperature">{{ weatherList?.t1h?.value ? weatherList?.t1h?.value + "°C" : "" }}</p>
+          <!-- 날씨 아이콘 -->
+          <div class="weather-icon" :class="getWeatherIcon(weatherList?.sky?.value)" aria-hidden="true"></div>
+
+          <p class="weather-text">{{ weatherError || weatherList?.sky?.text }}</p>
+          <p class="temperature">{{ weatherList?.t1h?.value ? weatherList?.t1h?.value + "°C" : "" }}</p>
+        </template>
       </section>
 
       <!-- 주간 날씨 -->
-      <WeeklyWeather :lat="position.lat" :lng="position.lng" />
+      <WeeklyWeather :lat="position.lat" :lng="position.lng" :location-error="locationError" />
     </div>
   </main>
 </template>
@@ -53,6 +60,8 @@ const locationError = ref("");
 const weatherError = ref("");
 // API 호출 중 로딩 상태
 const isLoading = ref(false);
+// 위치 권한 재시도 여부 (무한 루프 방지)
+const hasRetriedLocation = ref(false);
 // 기준 일시 표기용 상태
 const nowTime = ref("");
 const nowDate = ref("");
@@ -81,8 +90,22 @@ const updateLocationFromGps = async () => {
       lng: coords.lng,
     };
     fetchWeather(position.value.lat, position.value.lng);
-  } catch {
+  } catch (error) {
     locationError.value = "위치 권한이 거부되었거나 위치를 가져올 수 없습니다.";
+    isLoading.value = false;
+
+    // 첫 거부 시에만 재시도 팝업 표시
+    if (!hasRetriedLocation.value) {
+      const retry = window.confirm("위치정보를 허용해주세요\n\n이 앱은 현재 위치의 날씨를 표시하기 위해 위치 정보가 필요합니다.\n\n'확인'을 누르면 위치 권한을 다시 요청합니다.");
+
+      if (retry) {
+        hasRetriedLocation.value = true;
+        updateLocationFromGps();
+      }
+    } else {
+      // 재시도 후에도 거부된 경우 브라우저 설정 안내
+      alert("위치 권한이 차단되었습니다.\n\n브라우저 설정에서 위치 권한을 허용해주세요:\n1. 주소창 왼쪽 자물쇠 아이콘 클릭\n2. '위치' 권한을 '허용'으로 변경\n3. 페이지 새로고침");
+    }
   }
 };
 
@@ -223,6 +246,7 @@ onMounted(() => {
   text-align: center;
   position: relative;
   box-sizing: border-box;
+  min-height: 332px;
 }
 
 .loading-overlay {
@@ -259,6 +283,25 @@ onMounted(() => {
   font-size: 14px;
   font-weight: 600;
   color: #4c6f8f;
+}
+
+.location-error-full {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+  background: #ffffffee;
+  backdrop-filter: blur(6px);
+  border-radius: 24px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #6b7280;
+  text-align: center;
+  line-height: 1.6;
+  z-index: 5;
+  box-sizing: border-box;
 }
 
 .location-row {
