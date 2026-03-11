@@ -6,7 +6,7 @@
 
     <!-- FCM Token 토글 버튼 -->
     <button v-if="fcmToken" @click="showToken = !showToken" class="token-toggle-button">
-      {{ showToken ? '✕' : '🔧' }}
+      {{ showToken ? "✕" : "🔧" }}
     </button>
 
     <!-- FCM Token 표시 (토글) -->
@@ -15,7 +15,7 @@
         <div class="token-header">
           <span class="token-label">FCM Token (개발자용)</span>
           <button @click="copyToken" class="copy-button">
-            {{ copied ? '복사됨 ✓' : '복사' }}
+            {{ copied ? "복사됨 ✓" : "복사" }}
           </button>
         </div>
         <div class="token-content">
