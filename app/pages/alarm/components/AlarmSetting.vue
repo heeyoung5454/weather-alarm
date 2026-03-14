@@ -6,7 +6,7 @@
     </div>
 
     <div class="alarm-list">
-      <div v-for="(alarm, index) in alarms" :key="index" class="alarm-item">
+      <div v-for="alarm in alarms" :key="alarm.id" class="alarm-item">
         <div class="alarm-main">
           <div class="time">
             <input type="time" v-model="alarm.time" />
@@ -34,28 +34,26 @@
   </div>
 </template>
 <script setup lang="ts">
-import { doc, updateDoc } from "firebase/firestore";
-import { ref } from "vue";
+import { doc, updateDoc, getDoc } from "firebase/firestore";
+import { ref, onMounted } from "vue";
+import { onAuthStateChanged } from "firebase/auth";
 import { regions } from "../../../constants/region";
 
 const { $db, $auth } = useNuxtApp();
 
 const regionKeys = Object.keys(regions);
 
-const alarms = ref([
-  {
-    time: "07:00",
-    region: "서울",
-    enabled: true,
-  },
-]);
+const alarms = ref<any[]>([]);
+
+const defaultAlarm = () => ({
+  id: crypto.randomUUID(),
+  time: "07:00",
+  region: "서울",
+  enabled: true,
+});
 
 const addAlarm = () => {
-  alarms.value.push({
-    time: "07:00",
-    region: "서울",
-    enabled: true,
-  });
+  alarms.value.push(defaultAlarm());
 };
 
 const removeAlarm = (index: number) => {
@@ -72,6 +70,33 @@ const saveSetting = async () => {
 
   alert("알림 저장 완료");
 };
+
+const loadAlarms = async (uid: string) => {
+  const snapshot = await getDoc(doc($db, "users", uid));
+
+  if (!snapshot.exists()) {
+    alarms.value = [defaultAlarm()];
+    return;
+  }
+
+  const data = snapshot.data();
+
+  if (data.alarms && data.alarms.length > 0) {
+    alarms.value = data.alarms;
+  } else {
+    alarms.value = [defaultAlarm()];
+  }
+
+  console.log("불러온 알람", alarms.value);
+};
+
+onMounted(() => {
+  onAuthStateChanged($auth, async (user) => {
+    if (!user) return;
+
+    await loadAlarms(user.uid);
+  });
+});
 </script>
 
 <style scoped>
