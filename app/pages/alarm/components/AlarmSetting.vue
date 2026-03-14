@@ -6,7 +6,7 @@
     </div>
 
     <div class="alarm-list">
-      <div v-for="alarm in alarms" :key="alarm.id" class="alarm-item">
+      <div v-for="(alarm, index) in alarms" :key="alarm.id" class="alarm-item">
         <div class="alarm-main">
           <div class="time">
             <input type="time" v-model="alarm.time" />
@@ -25,7 +25,7 @@
             </option>
           </select>
 
-          <button class="delete-btn" @click="removeAlarm(index)">삭제</button>
+          <button class="delete-btn" @click="removeAlarm(alarm.id)">삭제</button>
         </div>
       </div>
     </div>
@@ -33,8 +33,10 @@
     <button class="save-btn" @click="saveSetting">저장</button>
   </div>
 </template>
+
 <script setup lang="ts">
-import { doc, updateDoc, getDoc } from "firebase/firestore";
+import { collection, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs } from "firebase/firestore";
+
 import { ref, onMounted } from "vue";
 import { onAuthStateChanged } from "firebase/auth";
 import { regions } from "../../../constants/region";
@@ -50,50 +52,77 @@ const defaultAlarm = () => ({
   time: "07:00",
   region: "서울",
   enabled: true,
+  isNew: true,
 });
 
+/* 알람 추가 */
 const addAlarm = () => {
   alarms.value.push(defaultAlarm());
 };
 
-const removeAlarm = (index: number) => {
+/* 알람 삭제 */
+const removeAlarm = async (id: string) => {
+  const index = alarms.value.findIndex((a) => a.id === id);
+
+  if (index === -1) return;
+
+  const alarm = alarms.value[index];
+
+  if (!alarm.isNew) {
+    await deleteDoc(doc($db, "alarms", alarm.id));
+  }
+
   alarms.value.splice(index, 1);
 };
 
+/* 알람 저장 */
 const saveSetting = async () => {
   const user = $auth.currentUser;
   if (!user) return;
 
-  await updateDoc(doc($db, "users", user.uid), {
-    alarms: alarms.value,
-  });
+  const token = localStorage.getItem("fcmToken");
+
+  for (const alarm of alarms.value) {
+    if (alarm.isNew) {
+      const refDoc = await addDoc(collection($db, "alarms"), {
+        uid: user.uid,
+        token: token,
+        time: alarm.time,
+        region: alarm.region,
+        enabled: alarm.enabled,
+        createdAt: new Date(),
+      });
+
+      alarm.id = refDoc.id;
+      alarm.isNew = false;
+    } else {
+      await updateDoc(doc($db, "alarms", alarm.id), {
+        time: alarm.time,
+        region: alarm.region,
+        enabled: alarm.enabled,
+      });
+    }
+  }
 
   alert("알림 저장 완료");
 };
 
+/* 알람 불러오기 */
 const loadAlarms = async (uid: string) => {
-  const snapshot = await getDoc(doc($db, "users", uid));
+  const q = query(collection($db, "alarms"), where("uid", "==", uid));
 
-  if (!snapshot.exists()) {
-    alarms.value = [defaultAlarm()];
-    return;
-  }
+  const snapshot = await getDocs(q);
 
-  const data = snapshot.data();
-
-  if (data.alarms && data.alarms.length > 0) {
-    alarms.value = data.alarms;
-  } else {
-    alarms.value = [defaultAlarm()];
-  }
-
-  console.log("불러온 알람", alarms.value);
+  alarms.value = snapshot.docs.map((d) => ({
+    id: d.id,
+    ...d.data(),
+    isNew: false,
+  }));
 };
 
 onMounted(() => {
   onAuthStateChanged($auth, async (user) => {
     if (!user) return;
-
     await loadAlarms(user.uid);
   });
 });
@@ -164,8 +193,6 @@ select {
   cursor: pointer;
 }
 
-/* iOS switch */
-
 .switch {
   position: relative;
   display: inline-block;
@@ -175,33 +202,29 @@ select {
 
 .switch input {
   opacity: 0;
-  width: 0;
-  height: 0;
 }
 
 .slider {
   position: absolute;
-  cursor: pointer;
   inset: 0;
-  background-color: #ccc;
-  transition: 0.2s;
+  background: #ccc;
   border-radius: 34px;
 }
 
 .slider:before {
-  position: absolute;
   content: "";
+  position: absolute;
   height: 22px;
   width: 22px;
   left: 3px;
   bottom: 3px;
-  background-color: white;
-  transition: 0.2s;
+  background: white;
   border-radius: 50%;
+  transition: 0.2s;
 }
 
 input:checked + .slider {
-  background-color: #34c759;
+  background: #34c759;
 }
 
 input:checked + .slider:before {
@@ -212,12 +235,11 @@ input:checked + .slider:before {
   width: 100%;
   margin-top: 30px;
   padding: 14px;
-  border: none;
   border-radius: 10px;
+  border: none;
   background: #111;
   color: white;
   font-size: 16px;
   font-weight: 600;
-  cursor: pointer;
 }
 </style>

@@ -50,6 +50,7 @@ onMounted(async () => {
   const token = await usePush();
   if (token) {
     fcmToken.value = token;
+    localStorage.setItem("fcmToken", token);
   }
 });
 </script>
