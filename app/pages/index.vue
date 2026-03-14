@@ -17,6 +17,8 @@
       <!-- 주간 날씨 -->
       <WeeklyWeather :lat="position.lat" :lng="position.lng" :location-error="locationError" />
     </div>
+
+    <button @click="startAlarm">매일 알림받기</button>
   </main>
 </template>
 
@@ -25,6 +27,10 @@ import CurrentWeather from "./weather/components/CurrentWeather.vue";
 import WeeklyWeather from "./weather/components/WeeklyWeather.vue";
 
 import { ref } from "vue";
+
+import { useGoogleLogin } from "../composables/useGoogleLogin";
+import { saveUser } from "../composables/useUser";
+import { usePush } from "../composables/usePush";
 
 const position = ref({
   lat: 0,
@@ -39,6 +45,22 @@ const handlePositionUpdate = (lat: number, lng: number) => {
 
 const handleLocationError = (error: string) => {
   locationError.value = error;
+};
+
+// @ts-ignore - Nuxt auto-import
+const router = useRouter();
+
+const startAlarm = async () => {
+  const user = await useGoogleLogin();
+
+  const token = await usePush();
+
+  if (!user || !token) return;
+
+  await saveUser(user, token);
+
+  // 🔥 알람 설정 페이지 이동
+  router.push("/alarm");
 };
 </script>
 

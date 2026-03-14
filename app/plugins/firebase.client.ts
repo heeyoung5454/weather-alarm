@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getMessaging, isSupported } from "firebase/messaging";
+import { getAuth } from "firebase/auth";
 
 export default defineNuxtPlugin(async () => {
   const firebaseConfig = {
@@ -15,6 +16,7 @@ export default defineNuxtPlugin(async () => {
 
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
+  const auth = getAuth(app);
 
   let messaging = null;
 
@@ -26,6 +28,7 @@ export default defineNuxtPlugin(async () => {
     provide: {
       db,
       messaging,
+      auth,
     },
   };
 });

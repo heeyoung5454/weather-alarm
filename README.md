@@ -73,3 +73,8 @@ bun run preview
 ```
 
 Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+
+# etc
+
+인증: Firebase Authentication
+푸시: Firebase Cloud Messaging (FCM 토큰)
