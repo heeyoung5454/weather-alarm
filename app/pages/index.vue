@@ -16,9 +16,13 @@
 
       <!-- 주간 날씨 -->
       <WeeklyWeather :lat="position.lat" :lng="position.lng" :location-error="locationError" />
-    </div>
 
-    <button @click="startAlarm">매일 알림받기</button>
+      <!-- 알림설정 버튼 -->
+      <button type="button" class="alarm-setting-btn" @click="startAlarm">
+        <span class="alarm-icon">🔔</span>
+        <span class="alarm-label">알림설정</span>
+      </button>
+    </div>
   </main>
 </template>
 
@@ -126,6 +130,41 @@ const startAlarm = async () => {
   gap: 24px;
 }
 
+.alarm-setting-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 16px 24px;
+  border: none;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #2c83c9 0%, #17446d 100%);
+  color: white;
+  font-size: 16px;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(44, 131, 201, 0.4);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.alarm-setting-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(44, 131, 201, 0.5);
+}
+
+.alarm-setting-btn:active {
+  transform: translateY(0);
+}
+
+.alarm-icon {
+  font-size: 20px;
+}
+
+.alarm-label {
+  letter-spacing: -0.02em;
+}
+
 @media (max-width: 768px) {
   .national-weather-link {
     padding: 8px 12px;
@@ -135,6 +174,15 @@ const startAlarm = async () => {
   .arrow-icon {
     width: 14px;
     height: 14px;
+  }
+
+  .alarm-setting-btn {
+    padding: 14px 20px;
+    font-size: 15px;
+  }
+
+  .alarm-icon {
+    font-size: 18px;
   }
 }
 </style>
