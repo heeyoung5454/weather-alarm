@@ -9,11 +9,14 @@ import { dfs_xy_conv } from "../utils/dfsXyConv";
  * @returns
  */
 export const getUltraSrtNcst = async (lat: number, lng: number, base_date: string, base_time: string) => {
-  const config = useRuntimeConfig();
-
   const grid = dfs_xy_conv("toXY", lat, lng);
+  return getUltraSrtNcstByGrid(grid.x, grid.y, base_date, base_time);
+};
 
-  const res = await $fetch("https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst", {
+/** 격자 좌표(nx, ny)로 초단기 실황 조회 - regions 의 x, y 사용 시 */
+export const getUltraSrtNcstByGrid = async (nx: number, ny: number, base_date: string, base_time: string) => {
+  const config = useRuntimeConfig();
+  return $fetch("https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst", {
     params: {
       serviceKey: config.public.weatherKey,
       numOfRows: 10,
@@ -21,11 +24,10 @@ export const getUltraSrtNcst = async (lat: number, lng: number, base_date: strin
       dataType: "JSON",
       base_date,
       base_time,
-      nx: grid.x,
-      ny: grid.y,
+      nx,
+      ny,
     },
   });
-  return res;
 };
 
 /**
@@ -37,11 +39,14 @@ export const getUltraSrtNcst = async (lat: number, lng: number, base_date: strin
  * @returns
  */
 export const getUltraSrtFcst = async (lat: number, lng: number, base_date: string, base_time: string) => {
-  const config = useRuntimeConfig();
-
   const grid = dfs_xy_conv("toXY", lat, lng);
+  return getUltraSrtFcstByGrid(grid.x, grid.y, base_date, base_time);
+};
 
-  const res = await $fetch("https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtFcst", {
+/** 격자 좌표(nx, ny)로 초단기예보 조회 - regions 의 x, y 사용 시 */
+export const getUltraSrtFcstByGrid = async (nx: number, ny: number, base_date: string, base_time: string) => {
+  const config = useRuntimeConfig();
+  return $fetch("https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtFcst", {
     params: {
       serviceKey: config.public.weatherKey,
       numOfRows: 50,
@@ -49,11 +54,10 @@ export const getUltraSrtFcst = async (lat: number, lng: number, base_date: strin
       dataType: "JSON",
       base_date,
       base_time,
-      nx: grid.x,
-      ny: grid.y,
+      nx,
+      ny,
     },
   });
-  return res;
 };
 
 /**

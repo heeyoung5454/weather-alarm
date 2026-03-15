@@ -138,50 +138,7 @@
 import { ref, computed, onMounted } from "vue";
 import { getVilageFcst } from "../../composables/useWeather";
 import { getVilageFcstBaseDateTime } from "../../utils/timeConvert";
-
-// 지역별 위도/경도
-const regionLatLon = {
-  서울: { lat: 37.5665, lon: 126.978 },
-  인천: { lat: 37.4563, lon: 126.7052 },
-  춘천: { lat: 37.8813, lon: 127.7298 },
-  강릉: { lat: 37.7519, lon: 128.8761 },
-  수원: { lat: 37.2636, lon: 127.0286 },
-  청주: { lat: 36.6424, lon: 127.489 },
-  울릉도독도: { lat: 37.4845, lon: 130.9057 },
-  안동: { lat: 36.5684, lon: 128.7294 },
-  포항: { lat: 36.019, lon: 129.3435 },
-  대전: { lat: 36.3504, lon: 127.3845 },
-  대구: { lat: 35.8714, lon: 128.6014 },
-  전주: { lat: 35.8242, lon: 127.148 },
-  울산: { lat: 35.5384, lon: 129.3114 },
-  부산: { lat: 35.1796, lon: 129.0756 },
-  광주: { lat: 35.1595, lon: 126.8526 },
-  여수: { lat: 34.7604, lon: 127.6622 },
-  목포: { lat: 34.8118, lon: 126.3922 },
-  제주: { lat: 33.4996, lon: 126.5312 },
-};
-
-// 지도 이미지상의 위치 (% 단위)
-const regionPositions = {
-  서울: { x: 29, y: 15 },
-  인천: { x: 12, y: 28 },
-  춘천: { x: 46, y: 17 },
-  강릉: { x: 64, y: 20 },
-  수원: { x: 22, y: 43 },
-  청주: { x: 41, y: 41 },
-  울릉도독도: { x: 90, y: 28 },
-  안동: { x: 62, y: 44 },
-  포항: { x: 80, y: 47 },
-  대전: { x: 34, y: 56 },
-  대구: { x: 52, y: 59 },
-  전주: { x: 17, y: 58 },
-  울산: { x: 80, y: 64 },
-  부산: { x: 60, y: 73 },
-  광주: { x: 24, y: 71 },
-  여수: { x: 38, y: 81 },
-  목포: { x: 10, y: 80 },
-  제주: { x: 22, y: 94 },
-};
+import { regionLatLon, regions as regionPositions } from "../../constants/region";
 
 interface RegionWeatherData {
   current?: { temp: string; sky: string };
@@ -325,7 +282,7 @@ const fetchRegionWeather = async (regionName: string, lat: number, lon: number) 
 const loadNationalWeather = async () => {
   isLoading.value = true;
 
-  const regionNames = Object.keys(regionLatLon) as Array<keyof typeof regionLatLon>;
+  const regionNames = Object.keys(regionLatLon) as (keyof typeof regionLatLon)[];
   const weatherPromises = regionNames.map((name) => {
     const { lat, lon } = regionLatLon[name];
     return fetchRegionWeather(name, lat, lon);
