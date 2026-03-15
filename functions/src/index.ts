@@ -29,22 +29,29 @@ export const alarmPush = onSchedule(
       .where('enabled', '==', true)
       .get();
 
+    const baseUrl = 'https://weatheralarm-155bf.web.app';
     for (const doc of snapshot.docs) {
       const alarm = doc.data();
+      const region = alarm.region || '서울';
 
       if (!alarm.token) continue;
 
-      console.log('푸시 대상 토큰:', alarm.token);
+      const url = `${baseUrl}/alarm/notiWeather?region=${encodeURIComponent(region)}`;
+      console.log('푸시 대상 토큰:', alarm.token, '지역:', region);
 
       await admin.messaging().send({
         token: alarm.token,
         notification: {
           title: '오늘 날씨 알림',
-          body: `${alarm.region} 날씨 확인하세요`,
+          body: `${region} 날씨 확인하세요`,
+        },
+        data: {
+          url,
+          region,
         },
       });
 
-      console.log('푸시 보냄', alarm.region);
+      console.log('푸시 보냄', region);
     }
   },
 );

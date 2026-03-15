@@ -31,17 +31,25 @@ export const usePush = async () => {
 
   console.log("FCM TOKEN:", token);
 
-  // 🔥 포그라운드 푸시 수신
+  // 🔥 포그라운드 푸시 수신 (클릭 시 data.url로 이동)
   onMessage(messaging, (payload) => {
     console.log("Foreground message:", payload);
 
     const title = payload.notification?.title || payload.data?.title || "알림";
     const body = payload.notification?.body || payload.data?.body || "";
+    const url = payload.data?.url;
 
-    new Notification(title, {
+    const notification = new Notification(title, {
       body,
       icon: "/icon.png",
     });
+
+    if (url && typeof window !== "undefined") {
+      notification.onclick = () => {
+        window.focus();
+        window.location.href = url;
+      };
+    }
   });
 
   return token;
