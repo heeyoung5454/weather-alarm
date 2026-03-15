@@ -1,5 +1,5 @@
 import { getApp } from "firebase/app";
-import { getToken, isSupported, getMessaging } from "firebase/messaging";
+import { getToken, isSupported, getMessaging, onMessage } from "firebase/messaging";
 
 export const usePush = async () => {
   const supported = await isSupported();
@@ -30,6 +30,19 @@ export const usePush = async () => {
   });
 
   console.log("FCM TOKEN:", token);
+
+  // 🔥 포그라운드 푸시 수신
+  onMessage(messaging, (payload) => {
+    console.log("Foreground message:", payload);
+
+    const title = payload.notification?.title || payload.data?.title || "알림";
+    const body = payload.notification?.body || payload.data?.body || "";
+
+    new Notification(title, {
+      body,
+      icon: "/icon.png",
+    });
+  });
 
   return token;
 };
