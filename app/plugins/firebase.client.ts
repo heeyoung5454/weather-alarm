@@ -19,9 +19,17 @@ export default defineNuxtPlugin(async () => {
   const auth = getAuth(app);
 
   let messaging = null;
+  try {
+    if (process.client && (await isSupported())) {
+      // 🔥 Service Worker 등록
+      if ("serviceWorker" in navigator) {
+        await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+      }
 
-  if (await isSupported()) {
-    messaging = getMessaging(app);
+      messaging = getMessaging(app);
+    }
+  } catch (e) {
+    console.warn("Firebase Messaging init failed:", e);
   }
 
   return {

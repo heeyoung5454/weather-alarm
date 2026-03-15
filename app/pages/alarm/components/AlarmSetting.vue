@@ -25,7 +25,7 @@
             </option>
           </select>
 
-          <button class="delete-btn" @click="removeAlarm(alarm.id)">삭제</button>
+          <button class="delete-btn" @click="removeAlarm(index)">삭제</button>
         </div>
       </div>
     </div>
@@ -40,6 +40,8 @@ import { collection, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs } 
 import { ref, onMounted } from "vue";
 import { onAuthStateChanged } from "firebase/auth";
 import { regions } from "../../../constants/region";
+import { usePush } from "../../../composables/usePush";
+import { saveUser } from "../../../composables/useUser";
 
 const { $db, $auth } = useNuxtApp();
 
@@ -61,18 +63,22 @@ const addAlarm = () => {
 };
 
 /* 알람 삭제 */
-const removeAlarm = async (id: string) => {
-  const index = alarms.value.findIndex((a) => a.id === id);
-
-  if (index === -1) return;
-
-  const alarm = alarms.value[index];
-
-  if (!alarm.isNew) {
-    await deleteDoc(doc($db, "alarms", alarm.id));
-  }
-
+const removeAlarm = async (index: number) => {
+  await deleteDoc(doc($db, "alarms", alarms.value[index].id));
   alarms.value.splice(index, 1);
+};
+
+/* 현재 FCM 토큰 가져오기 (없으면 발급 후 동기화) */
+const getCurrentFcmToken = async (user: any): Promise<string | null> => {
+  let token = localStorage.getItem("fcmToken");
+  if (token) return token;
+
+  token = (await usePush()) ?? null;
+  if (token && user) {
+    localStorage.setItem("fcmToken", token);
+    await saveUser(user, token);
+  }
+  return token;
 };
 
 /* 알람 저장 */
@@ -80,13 +86,17 @@ const saveSetting = async () => {
   const user = $auth.currentUser;
   if (!user) return;
 
-  const token = localStorage.getItem("fcmToken");
+  const token = await getCurrentFcmToken(user);
+  if (!token) {
+    alert("알림 권한을 허용해주세요. 설정에서 알림을 켜주세요.");
+    return;
+  }
 
   for (const alarm of alarms.value) {
     if (alarm.isNew) {
       const refDoc = await addDoc(collection($db, "alarms"), {
         uid: user.uid,
-        token: token,
+        token,
         time: alarm.time,
         region: alarm.region,
         enabled: alarm.enabled,
@@ -97,6 +107,7 @@ const saveSetting = async () => {
       alarm.isNew = false;
     } else {
       await updateDoc(doc($db, "alarms", alarm.id), {
+        token,
         time: alarm.time,
         region: alarm.region,
         enabled: alarm.enabled,
@@ -124,6 +135,13 @@ onMounted(() => {
   onAuthStateChanged($auth, async (user) => {
     if (!user) return;
     await loadAlarms(user.uid);
+
+    /* 알람 페이지 진입 시 FCM 토큰 갱신 후 동기화 */
+    const token = await usePush();
+    if (token) {
+      localStorage.setItem("fcmToken", token);
+      await saveUser(user, token);
+    }
   });
 });
 </script>

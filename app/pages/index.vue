@@ -62,8 +62,8 @@ const startAlarm = async () => {
   if (!user || !token) return;
 
   await saveUser(user, token);
+  localStorage.setItem("fcmToken", token);
 
-  // 🔥 알람 설정 페이지 이동
   router.push("/alarm");
 };
 </script>
