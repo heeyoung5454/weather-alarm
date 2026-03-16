@@ -30,10 +30,15 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { useLocation } from "../../../composables/useLocation";
 import { getRegionName } from "../../../utils/reverseGeo";
 import { getUltraSrtNcst, getUltraSrtFcst } from "../../../composables/useWeather";
 import { getBaseDateTime, getFcstBaseTime } from "../../../utils/timeConvert";
+
+const props = defineProps<{
+  initialLat?: number;
+  initialLng?: number;
+  useSavedLocation?: boolean;
+}>();
 
 const emit = defineEmits<{
   (e: "update:position", lat: number, lng: number): void;
@@ -68,49 +73,6 @@ const position = ref({
   lat: 0,
   lng: 0,
 });
-
-// GPS 좌표 조회 함수
-const { getCurrentLocation } = useLocation();
-
-// 페이지 진입 시 GPS/지역명/날씨를 순차 조회한다.
-const updateLocationFromGps = async () => {
-  isLoading.value = true;
-  try {
-    const coords = await getCurrentLocation();
-    const region = await getRegionName(coords.lat, coords.lng);
-    locationText.value = `${region.address.city} ${region.address.borough} ${region.address.suburb}`;
-    locationError.value = "";
-
-    position.value = {
-      lat: coords.lat,
-      lng: coords.lng,
-    };
-    
-    // 부모 컴포넌트에 위치 정보 전달
-    emit("update:position", coords.lat, coords.lng);
-    emit("update:location-error", "");
-    
-    fetchWeather(position.value.lat, position.value.lng);
-  } catch (error) {
-    const errorMsg = "위치 권한이 거부되었거나 위치를 가져올 수 없습니다.";
-    locationError.value = errorMsg;
-    emit("update:location-error", errorMsg);
-    isLoading.value = false;
-
-    // 첫 거부 시에만 재시도 팝업 표시
-    if (!hasRetriedLocation.value) {
-      const retry = window.confirm("위치정보를 허용해주세요\n\n이 앱은 현재 위치의 날씨를 표시하기 위해 위치 정보가 필요합니다.\n\n'확인'을 누르면 위치 권한을 다시 요청합니다.");
-
-      if (retry) {
-        hasRetriedLocation.value = true;
-        updateLocationFromGps();
-      }
-    } else {
-      // 재시도 후에도 거부된 경우 브라우저 설정 안내
-      alert("위치 권한이 차단되었습니다.\n\n브라우저 설정에서 위치 권한을 허용해주세요:\n1. 주소창 왼쪽 자물쇠 아이콘 클릭\n2. '위치' 권한을 '허용'으로 변경\n3. 페이지 새로고침");
-    }
-  }
-};
 
 // 기상청 API 응답을 받아 현재 카드에 필요한 형태로 변환한다.
 const fetchWeather = async (lat: number, lng: number) => {
@@ -215,8 +177,31 @@ const convertWeatherToObject = (ncstData: Record<string, string>, fcstData?: Rec
   };
 };
 
-onMounted(() => {
-  updateLocationFromGps();
+onMounted(async () => {
+  if (props.initialLat && props.initialLng) {
+    position.value = {
+      lat: props.initialLat,
+      lng: props.initialLng,
+    };
+    locationError.value = "";
+
+    // 저장된 좌표 기준으로 위치 텍스트 설정
+    try {
+      const region = await getRegionName(props.initialLat, props.initialLng);
+      if (region?.address) {
+        locationText.value = `${region.address.city ?? ""} ${region.address.borough ?? ""} ${region.address.suburb ?? ""}`.trim();
+      }
+    } catch {
+      // 실패 시 텍스트는 비워 둠
+    }
+
+    emit("update:position", props.initialLat, props.initialLng);
+    emit("update:location-error", "");
+    fetchWeather(props.initialLat, props.initialLng);
+  } else {
+    locationError.value = "위치 정보를 가져올 수 없습니다.";
+    emit("update:location-error", locationError.value);
+  }
 });
 </script>
 

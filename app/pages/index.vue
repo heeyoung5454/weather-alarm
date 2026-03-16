@@ -12,7 +12,14 @@
       </div>
 
       <!-- 현재 날씨 -->
-      <CurrentWeather @update:position="handlePositionUpdate" @update:location-error="handleLocationError" />
+      <CurrentWeather
+        v-if="currentReady"
+        :initial-lat="position.lat"
+        :initial-lng="position.lng"
+        :use-saved-location="hasSavedLocation"
+        @update:position="handlePositionUpdate"
+        @update:location-error="handleLocationError"
+      />
 
       <!-- 주간 날씨 -->
       <WeeklyWeather :lat="position.lat" :lng="position.lng" :location-error="locationError" />
@@ -30,11 +37,14 @@
 import CurrentWeather from "./weather/components/CurrentWeather.vue";
 import WeeklyWeather from "./weather/components/WeeklyWeather.vue";
 
-import { ref } from "vue";
+import { ref, onMounted } from "vue";
+import { doc, getDoc } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 
 import { useGoogleLogin } from "../composables/useGoogleLogin";
 import { saveUser } from "../composables/useUser";
 import { usePush } from "../composables/usePush";
+import { useLocation } from "../composables/useLocation";
 
 const position = ref({
   lat: 0,
@@ -42,6 +52,8 @@ const position = ref({
 });
 
 const locationError = ref("");
+const hasSavedLocation = ref(false);
+const currentReady = ref(false);
 
 const handlePositionUpdate = (lat: number, lng: number) => {
   position.value = { lat, lng };
@@ -53,16 +65,57 @@ const handleLocationError = (error: string) => {
 
 // @ts-ignore - Nuxt auto-import
 const router = useRouter();
+// @ts-ignore - Nuxt auto-import
+const { $auth, $db } = useNuxtApp();
+
+const { getCurrentLocation } = useLocation();
+
+onMounted(() => {
+  onAuthStateChanged($auth, async (user) => {
+    if (!user) {
+      // 비로그인: 여기서 한 번만 현재 위치를 가져온다.
+      try {
+        const coords = await getCurrentLocation();
+        position.value = { lat: coords.lat, lng: coords.lng };
+      } catch {
+        locationError.value = "위치 권한이 거부되었거나 위치를 가져올 수 없습니다.";
+      } finally {
+        currentReady.value = true;
+      }
+      return;
+    }
+
+    const ref = doc($db, "users", user.uid);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      const data: any = snap.data();
+      if (typeof data.lat === "number" && typeof data.lng === "number") {
+        position.value = { lat: data.lat, lng: data.lng };
+        hasSavedLocation.value = true;
+      }
+    }
+
+    currentReady.value = true;
+  });
+});
 
 const startAlarm = async () => {
-  const user = await useGoogleLogin();
+  let user = $auth.currentUser;
+  if (!user) {
+    user = await useGoogleLogin();
+  }
 
   const token = await usePush();
-
   if (!user || !token) return;
 
-  await saveUser(user, token);
-  localStorage.setItem("fcmToken", token);
+  try {
+    const coords = await getCurrentLocation();
+    await saveUser(user, token, { lat: coords.lat, lng: coords.lng });
+    localStorage.setItem("fcmToken", token);
+  } catch {
+    await saveUser(user, token);
+    localStorage.setItem("fcmToken", token);
+  }
 
   router.push("/alarm");
 };
