@@ -281,38 +281,61 @@ const fetchWeather = async () => {
       return;
     }
 
-    const byTimeVilage = new Map<string, { sky: string; tmp: string }>();
+    const byTimeVilage = new Map<
+      string,
+      { dateStr: string; timeStr: string; sky: string; tmp: string }
+    >();
     vilageItems.forEach((item) => {
       const key = `${item.fcstDate}_${item.fcstTime}`;
-      if (!byTimeVilage.has(key)) byTimeVilage.set(key, { sky: "1", tmp: "-" });
+      const timeStr = item.fcstTime.padStart(4, "0");
+      if (!byTimeVilage.has(key)) {
+        byTimeVilage.set(key, {
+          dateStr: item.fcstDate,
+          timeStr,
+          sky: "1",
+          tmp: "-",
+        });
+      }
       const cur = byTimeVilage.get(key)!;
       if (item.category === "SKY") cur.sky = item.fcstValue;
       if (item.category === "TMP") cur.tmp = item.fcstValue;
     });
 
-    const slotOrder = ["0000", "0300", "0600", "0900", "1200", "1500", "1800", "2100"];
-    const slots: Array<{ time: string; sky: string; temp: string }> = [];
-    const addSlots = (dateStr: string, fromTime: string, toTimeInclusive: string) => {
-      const fromIdx = slotOrder.indexOf(fromTime);
-      const toIdx = slotOrder.indexOf(toTimeInclusive);
-      for (let i = fromIdx >= 0 ? fromIdx : 0; i <= (toIdx >= 0 ? toIdx : slotOrder.length - 1); i++) {
-        const t = slotOrder[i];
-        const k = `${dateStr}_${t}`;
-        const data = byTimeVilage.get(k);
-        if (data) {
-          const timeStr = `${t.slice(0, 2)}:${t.slice(2, 4)}`;
-          slots.push({ time: timeStr, sky: data.sky, temp: data.tmp });
-        }
+    // 현재 시각 기준 ~ 24시간 뒤까지의 3시간 단위 예보만 사용
+    const start = new Date();
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+
+    const entries: Array<{ dt: Date; sky: string; tmp: string }> = [];
+    byTimeVilage.forEach((v) => {
+      const y = Number(v.dateStr.slice(0, 4));
+      const m = Number(v.dateStr.slice(4, 6)) - 1;
+      const d = Number(v.dateStr.slice(6, 8));
+      const hh = Number(v.timeStr.slice(0, 2));
+      const mm = Number(v.timeStr.slice(2, 4));
+      const dt = new Date(y, m, d, hh, mm);
+      if (dt >= start && dt < end) {
+        entries.push({ dt, sky: v.sky, tmp: v.tmp });
       }
-    };
+    });
 
-    // 현재 시간부터 다음날 밤 12시(24시)까지 표기
-    if (firstSlotTime !== "2400") {
-      addSlots(todayStr, firstSlotTime, "2100");
-    }
-    addSlots(tomorrowStr, "0000", "2100");
+    // 시간 순 정렬 후, 3시간(0,3,6,9,12,15,18,21시) 단위만 사용
+    entries.sort((a, b) => a.dt.getTime() - b.dt.getTime());
 
-    hourlyForecast.value = slots;
+    hourlyForecast.value = entries
+      .filter((e) => {
+        const h = e.dt.getHours();
+        const m = e.dt.getMinutes();
+        return m === 0 && h % 3 === 0;
+      })
+      .map((e) => {
+        const hh = String(e.dt.getHours()).padStart(2, "0");
+        const mm = String(e.dt.getMinutes()).padStart(2, "0");
+        return {
+          time: `${hh}:${mm}`,
+          sky: e.sky,
+          temp: e.tmp,
+        };
+      });
   } catch {
     weatherError.value = "날씨정보를 확인할 수 없습니다.";
   } finally {
@@ -467,10 +490,6 @@ onMounted(async () => {
   box-sizing: border-box;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-
-  @media (max-width: 340px) {
-    width: 340px;
-  }
 }
 
 .chart-wrap::-webkit-scrollbar {

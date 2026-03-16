@@ -156,6 +156,8 @@ const isLoading = ref(true);
 const regions = ref<Region[]>([]);
 const selectedRegion = ref<string | null>(null);
 const { regionsByName, fetchRegions } = useRegions();
+// @ts-ignore - Nuxt auto-import
+const router = useRouter();
 
 // 선택된 지역의 날씨 데이터
 const selectedRegionData = computed(() => {
@@ -164,9 +166,10 @@ const selectedRegionData = computed(() => {
   return region?.data || null;
 });
 
-// 지역 선택 함수
+// 지역 선택 함수 - 상세 날씨 페이지로 이동
 const selectRegion = (regionName: string) => {
   selectedRegion.value = regionName;
+  router.push(`/alarm/notiWeather?region=${encodeURIComponent(regionName)}`);
 };
 
 // 하늘 상태 코드에 따른 이모지 반환
