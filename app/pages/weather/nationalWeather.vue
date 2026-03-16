@@ -138,7 +138,7 @@
 import { ref, computed, onMounted } from "vue";
 import { getVilageFcst } from "../../composables/useWeather";
 import { getVilageFcstBaseDateTime } from "../../utils/timeConvert";
-import { regionLatLon, regions as regionPositions } from "../../constants/region";
+import { useRegions } from "../../composables/useRegions";
 
 interface RegionWeatherData {
   current?: { temp: string; sky: string };
@@ -155,6 +155,7 @@ interface Region {
 const isLoading = ref(true);
 const regions = ref<Region[]>([]);
 const selectedRegion = ref<string | null>(null);
+const { regionsByName, fetchRegions } = useRegions();
 
 // 선택된 지역의 날씨 데이터
 const selectedRegionData = computed(() => {
@@ -281,25 +282,29 @@ const fetchRegionWeather = async (regionName: string, lat: number, lon: number) 
 // 전국 날씨 데이터 로드
 const loadNationalWeather = async () => {
   isLoading.value = true;
-
-  const regionNames = Object.keys(regionLatLon) as (keyof typeof regionLatLon)[];
+  const regionMap = regionsByName.value;
+  const regionNames = Object.keys(regionMap);
   const weatherPromises = regionNames.map((name) => {
-    const { lat, lon } = regionLatLon[name];
+    const { lat, lon } = regionMap[name];
     return fetchRegionWeather(name, lat, lon);
   });
 
   const weatherResults = await Promise.all(weatherPromises);
 
-  regions.value = regionNames.map((name, index) => ({
-    name,
-    position: regionPositions[name],
-    data: weatherResults[index] || {},
-  }));
+  regions.value = regionNames.map((name, index) => {
+    const r = regionMap[name];
+    return {
+      name,
+      position: { x: r.x, y: r.y },
+      data: weatherResults[index] || {},
+    };
+  });
 
   isLoading.value = false;
 };
 
-onMounted(() => {
+onMounted(async () => {
+  await fetchRegions();
   loadNationalWeather();
 });
 </script>

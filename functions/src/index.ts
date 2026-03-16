@@ -5,7 +5,7 @@ admin.initializeApp();
 
 export const alarmPush = onSchedule(
   {
-    schedule: '* * * * *',
+    schedule: '0-59/5 * * * *',
     timeZone: 'Asia/Seoul',
   },
   async () => {

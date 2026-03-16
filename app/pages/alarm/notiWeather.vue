@@ -61,9 +61,10 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useRoute } from "vue-router";
 import { getUltraSrtNcst, getUltraSrtFcst, getVilageFcst } from "../../composables/useWeather";
 import { getBaseDateTime, getFcstBaseTime, getVilageFcstBaseDateTime } from "../../utils/timeConvert";
-import { regionLatLon } from "../../constants/region";
+import { useRegions } from "../../composables/useRegions";
 
 const route = useRoute();
+const { regionsByName, fetchRegions } = useRegions();
 
 const regionParam = computed(() => {
   const r = route.query.region;
@@ -72,7 +73,9 @@ const regionParam = computed(() => {
 
 const regionCoords = computed(() => {
   if (!regionParam.value) return null;
-  return regionLatLon[regionParam.value] ?? null;
+  const region = regionsByName.value[regionParam.value];
+  if (!region) return null;
+  return { lat: region.lat, lon: region.lon };
 });
 
 const isLoading = ref(true);
@@ -317,7 +320,8 @@ const fetchWeather = async () => {
   }
 };
 
-onMounted(() => {
+onMounted(async () => {
+  await fetchRegions();
   if (regionCoords.value) {
     fetchWeather();
   } else {
