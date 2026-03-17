@@ -136,8 +136,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { getVilageFcst } from "../../composables/useWeather";
-import { getVilageFcstBaseDateTime } from "../../utils/timeConvert";
+import { collection, getDocs } from "firebase/firestore";
 import { useRegions } from "../../composables/useRegions";
 
 interface RegionWeatherData {
@@ -158,6 +157,8 @@ const selectedRegion = ref<string | null>(null);
 const { regionsByName, fetchRegions } = useRegions();
 // @ts-ignore - Nuxt auto-import
 const router = useRouter();
+// @ts-ignore - Nuxt auto-import
+const { $db } = useNuxtApp();
 
 // 선택된 지역의 날씨 데이터
 const selectedRegionData = computed(() => {
@@ -175,9 +176,10 @@ const selectRegion = (regionName: string) => {
 // 하늘 상태 코드에 따른 이모지 반환
 const getWeatherEmoji = (sky?: string) => {
   if (!sky) return "❓";
-  if (sky === "1") return "☀️";
-  if (sky === "3") return "🌤️";
-  if (sky === "4") return "☁️";
+  // code or text 모두 지원
+  if (sky === "1" || sky === "맑음") return "☀️";
+  if (sky === "3" || sky === "구름많음") return "🌤️";
+  if (sky === "4" || sky === "흐림") return "☁️";
   return "❓";
 };
 
@@ -187,99 +189,17 @@ const getWeatherText = (sky?: string) => {
   if (sky === "1") return "맑음";
   if (sky === "3") return "구름많음";
   if (sky === "4") return "흐림";
+  if (sky === "맑음" || sky === "구름많음" || sky === "흐림") return sky;
   return "정보 없음";
 };
 
 // 하늘 상태 코드 반환 (배경색 클래스용)
 const getWeatherCode = (sky?: string) => {
   if (!sky) return "unknown";
-  if (sky === "1") return "sunny";
-  if (sky === "3") return "cloudy";
-  if (sky === "4") return "overcast";
+  if (sky === "1" || sky === "맑음") return "sunny";
+  if (sky === "3" || sky === "구름많음") return "cloudy";
+  if (sky === "4" || sky === "흐림") return "overcast";
   return "unknown";
-};
-
-// 각 지역의 날씨 데이터 가져오기
-const fetchRegionWeather = async (regionName: string, lat: number, lon: number) => {
-  try {
-    const { baseDate, baseTime } = getVilageFcstBaseDateTime();
-    const res = await getVilageFcst(lat, lon, baseDate, baseTime);
-    const items = res.response.body.items.item;
-
-    if (!Array.isArray(items)) {
-      return null;
-    }
-
-    // 현재 시간 기준으로 오늘/내일 날짜 구하기
-    const now = new Date();
-    const currentHour = now.getHours();
-
-    // 오늘 날짜
-    const today = baseDate;
-
-    // 내일 날짜 계산
-    const tomorrow = new Date(parseInt(today.slice(0, 4)), parseInt(today.slice(4, 6)) - 1, parseInt(today.slice(6, 8)) + 1);
-    const tomorrowStr = tomorrow.getFullYear() + String(tomorrow.getMonth() + 1).padStart(2, "0") + String(tomorrow.getDate()).padStart(2, "0");
-
-    // 오전/오후 시간대 결정 (현재 시간 고려)
-    let amDate = today;
-    let pmDate = today;
-
-    // 현재 시간이 12시 이후면 오전은 내일로
-    if (currentHour >= 12) {
-      amDate = tomorrowStr;
-    }
-
-    // 현재 시간이 18시 이후면 오후도 내일로
-    if (currentHour >= 18) {
-      pmDate = tomorrowStr;
-    }
-
-    // 오전(06~12시), 오후(12~18시) 데이터 필터링
-    const amData = items.filter((item: any) => {
-      return item.fcstDate === amDate && item.fcstTime >= "0600" && item.fcstTime <= "1200";
-    });
-
-    const pmData = items.filter((item: any) => {
-      return item.fcstDate === pmDate && item.fcstTime >= "1200" && item.fcstTime <= "1800";
-    });
-
-    // 오전 데이터 추출 (09시 기준)
-    const amSky = amData.find((item: any) => item.category === "SKY" && item.fcstTime === "0900")?.fcstValue || amData.find((item: any) => item.category === "SKY")?.fcstValue || "1";
-    const amTemp = amData.find((item: any) => item.category === "TMP" && item.fcstTime === "0900")?.fcstValue || amData.find((item: any) => item.category === "TMP")?.fcstValue || "-";
-    const amPop = amData.find((item: any) => item.category === "POP" && item.fcstTime === "0900")?.fcstValue || amData.find((item: any) => item.category === "POP")?.fcstValue || "0";
-
-    // 오후 데이터 추출 (15시 기준)
-    const pmSky = pmData.find((item: any) => item.category === "SKY" && item.fcstTime === "1500")?.fcstValue || pmData.find((item: any) => item.category === "SKY")?.fcstValue || "1";
-    const pmTemp = pmData.find((item: any) => item.category === "TMP" && item.fcstTime === "1500")?.fcstValue || pmData.find((item: any) => item.category === "TMP")?.fcstValue || "-";
-    const pmPop = pmData.find((item: any) => item.category === "POP" && item.fcstTime === "1500")?.fcstValue || pmData.find((item: any) => item.category === "POP")?.fcstValue || "0";
-
-    // 현재 시간에 가장 가까운 예보 데이터 찾기
-    const currentTime = String(currentHour).padStart(2, "0") + "00";
-    const currentDateStr = today;
-
-    // 현재 시간 이후의 가장 가까운 예보 찾기
-    const futureItems = items.filter((item: any) => {
-      if (item.fcstDate === currentDateStr) {
-        return item.fcstTime >= currentTime;
-      }
-      return item.fcstDate > currentDateStr;
-    });
-
-    // 가장 가까운 시간대의 TMP와 SKY 찾기
-    const nearestTime = futureItems.length > 0 ? futureItems[0].fcstTime : null;
-    const currentTemp = nearestTime ? futureItems.find((item: any) => item.category === "TMP" && item.fcstTime === nearestTime)?.fcstValue || "-" : "-";
-    const currentSky = nearestTime ? futureItems.find((item: any) => item.category === "SKY" && item.fcstTime === nearestTime)?.fcstValue || "1" : "1";
-
-    return {
-      current: { temp: currentTemp, sky: currentSky },
-      am: { sky: amSky, temp: amTemp, pop: amPop },
-      pm: { sky: pmSky, temp: pmTemp, pop: pmPop },
-    };
-  } catch (error) {
-    console.error(`${regionName} 날씨 조회 실패:`, error);
-    return null;
-  }
 };
 
 // 전국 날씨 데이터 로드
@@ -287,19 +207,24 @@ const loadNationalWeather = async () => {
   isLoading.value = true;
   const regionMap = regionsByName.value;
   const regionNames = Object.keys(regionMap);
-  const weatherPromises = regionNames.map((name) => {
-    const { lat, lon } = regionMap[name];
-    return fetchRegionWeather(name, lat, lon);
+  const cacheSnap = await getDocs(collection($db, "regionWeatherCache"));
+  const cacheByName: Record<string, { temp?: number; sky?: string; updatedAt?: any }> = {};
+  cacheSnap.docs.forEach((d) => {
+    cacheByName[d.id] = d.data() as any;
   });
-
-  const weatherResults = await Promise.all(weatherPromises);
 
   regions.value = regionNames.map((name, index) => {
     const r = regionMap[name];
+    const cached = cacheByName[name];
     return {
       name,
       position: { x: r.x, y: r.y },
-      data: weatherResults[index] || {},
+      data: {
+        current: {
+          temp: cached?.temp !== undefined ? String(cached.temp) : "-",
+          sky: cached?.sky ?? "",
+        },
+      },
     };
   });
 

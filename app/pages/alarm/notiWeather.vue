@@ -1,7 +1,23 @@
 <template>
   <div class="page">
     <div class="content">
-      <NuxtLink to="/" class="back-link">← 홈</NuxtLink>
+      <div class="top-actions">
+        <NuxtLink to="/weather/nationalWeather" class="icon-link" aria-label="전국 날씨">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+            <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </NuxtLink>
+        <NuxtLink to="/" class="icon-link primary" aria-label="홈">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M3 10.5L12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-6a2 2 0 0 0-2-2H11a2 2 0 0 0-2 2v6H4a1 1 0 0 1-1-1V10.5Z"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </NuxtLink>
+      </div>
 
       <template v-if="!regionParam">
         <p class="error-text">지역 정보가 없습니다. URL에 region 파라미터를 넣어주세요.</p>
@@ -366,16 +382,53 @@ onMounted(async () => {
   margin: 0 auto;
 }
 
-.back-link {
-  display: inline-block;
+.top-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 20px;
-  color: #2c83c9;
-  font-weight: 600;
-  text-decoration: none;
 }
 
-.back-link:hover {
-  text-decoration: underline;
+.icon-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(23, 68, 109, 0.22);
+  color: #17446d;
+  text-decoration: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+  flex: none;
+  white-space: nowrap;
+}
+
+.icon-link.primary {
+  background: #17446dee;
+  border: 1px solid #2c83c9;
+  color: #ffffff;
+}
+
+.icon-link:hover {
+  transform: translateY(-1px);
+}
+
+.icon-link:active {
+  transform: translateY(0);
+}
+
+.icon-link:focus-visible {
+  outline: 2px solid rgba(142, 208, 255, 0.9);
+  outline-offset: 2px;
+}
+
+.icon {
+  width: 22px;
+  height: 22px;
 }
 
 .error-text {
