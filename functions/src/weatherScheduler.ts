@@ -1,13 +1,15 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
 import { defineSecret } from 'firebase-functions/params';
-import { getVilageFcst } from './utils/weather';
-import { getVilageFcstBaseDateTime } from './utils/timeConvert';
+import { getUltraSrtNcst } from './utils/weather';
+import { getUltraSrtBaseDateTime } from './utils/timeConvert';
 
 type CachedWeather = {
   temp: number;
   sky: string;
   rain: number;
+  baseDate: string;
+  baseTime: string;
 };
 
 const WEATHER_API_KEY = defineSecret('WEATHER_API_KEY');
@@ -43,8 +45,8 @@ export const cacheRegionWeather = onSchedule(
           }
 
           try {
-            const { baseDate, baseTime } = getVilageFcstBaseDateTime();
-            const weather = (await getVilageFcst(
+            const { baseDate, baseTime } = getUltraSrtBaseDateTime();
+            const weather = (await getUltraSrtNcst(
               lat,
               lon,
               baseDate,
