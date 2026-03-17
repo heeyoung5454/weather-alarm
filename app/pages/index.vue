@@ -1,8 +1,11 @@
 <template>
   <main class="page">
     <div class="page-content">
-      <!-- 전국날씨 링크 -->
+      <!-- 상단 영역 -->
       <div class="header-section">
+        <button type="button" class="gps-refresh-btn" @click="refreshLocation" aria-label="현재 위치 업데이트">
+          <span class="gps-refresh-icon" aria-hidden="true"></span>
+        </button>
         <NuxtLink to="/weather/nationalWeather" class="national-weather-link">
           <span class="link-text">전국날씨</span>
           <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -29,6 +32,8 @@
         <span class="alarm-icon">🔔</span>
         <span class="alarm-label">알림설정</span>
       </button>
+
+      <ToastMessage :message="toastMessage" :visible="toastVisible" />
     </div>
   </main>
 </template>
@@ -36,6 +41,7 @@
 <script setup lang="ts">
 import CurrentWeather from "./weather/components/CurrentWeather.vue";
 import WeeklyWeather from "./weather/components/WeeklyWeather.vue";
+import ToastMessage from "../components/ToastMessage.vue";
 
 import { ref, onMounted } from "vue";
 import { doc, getDoc } from "firebase/firestore";
@@ -54,6 +60,8 @@ const position = ref({
 const locationError = ref("");
 const hasSavedLocation = ref(false);
 const currentReady = ref(false);
+const toastVisible = ref(false);
+const toastMessage = ref("");
 
 const handlePositionUpdate = (lat: number, lng: number) => {
   position.value = { lat, lng };
@@ -69,6 +77,30 @@ const router = useRouter();
 const { $auth, $db } = useNuxtApp();
 
 const { getCurrentLocation } = useLocation();
+
+const refreshLocation = async () => {
+  try {
+    const coords = await getCurrentLocation();
+    position.value = { lat: coords.lat, lng: coords.lng };
+    locationError.value = "";
+    hasSavedLocation.value = false;
+
+    // 로그인 상태라면 users 컬렉션의 lat/lng도 함께 업데이트
+    const user = $auth.currentUser;
+    if (user) {
+      const token = localStorage.getItem("fcmToken") || "";
+      if (token) {
+        await saveUser(user, token, { lat: coords.lat, lng: coords.lng });
+      }
+    }
+  } catch {
+    toastMessage.value = "위치 정보를 허용해주세요.";
+    toastVisible.value = true;
+    setTimeout(() => {
+      toastVisible.value = false;
+    }, 2000);
+  }
+};
 
 onMounted(() => {
   onAuthStateChanged($auth, async (user) => {
@@ -135,7 +167,64 @@ const startAlarm = async () => {
 
 .header-section {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.gps-refresh-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: none;
+  background: #ffffffee;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(29, 76, 122, 0.15);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
+}
+
+.gps-refresh-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(29, 76, 122, 0.2);
+}
+
+.gps-refresh-btn:active {
+  transform: translateY(0);
+}
+
+.gps-refresh-icon {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #2c83c9;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.gps-refresh-icon::before,
+.gps-refresh-icon::after {
+  content: "";
+  position: absolute;
+  background: #2c83c9;
+}
+
+.gps-refresh-icon::before {
+  width: 2px;
+  height: 24px;
+  top: -5px;
+  left: 6px;
+}
+
+.gps-refresh-icon::after {
+  width: 24px;
+  height: 2px;
+  top: 6px;
+  left: -5px;
 }
 
 .national-weather-link {

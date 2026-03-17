@@ -7,12 +7,12 @@
     </div>
 
     <!-- 위치 에러 메시지 -->
-    <div v-if="locationError" class="location-error-full">
-      {{ locationError }}
+    <div v-if="displayLocationError" class="location-error-full">
+      {{ displayLocationError }}
     </div>
 
     <!-- 날씨 정보 (위치 에러가 없을 때만 표시) -->
-    <template v-if="!locationError">
+    <template v-if="!displayLocationError">
       <div class="location-row">
         <span class="gps-icon" aria-hidden="true"></span>
         <p class="location-text">{{ locationText }}</p>
@@ -29,7 +29,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, ref, watch, computed } from "vue";
 import { getRegionName } from "../../../utils/reverseGeo";
 import { getUltraSrtNcst, getUltraSrtFcst } from "../../../composables/useWeather";
 import { getBaseDateTime, getFcstBaseTime } from "../../../utils/timeConvert";
@@ -38,6 +38,7 @@ const props = defineProps<{
   initialLat?: number;
   initialLng?: number;
   useSavedLocation?: boolean;
+  locationError?: string; // 상위에서 내려주는 위치 에러 메시지
 }>();
 
 const emit = defineEmits<{
@@ -55,8 +56,8 @@ const getWeatherIcon = (sky: string) => {
 
 // 화면에 표시할 현재 위치 텍스트
 const locationText = ref("");
-// 위치 조회 실패 메시지
-const locationError = ref("");
+// 위치 조회 실패 메시지 (내부 기본값)
+const internalLocationError = ref("");
 // 날씨 API 조회 실패 메시지
 const weatherError = ref("");
 // API 호출 중 로딩 상태
@@ -73,6 +74,26 @@ const position = ref({
   lat: 0,
   lng: 0,
 });
+
+const displayLocationError = computed(() => props.locationError || internalLocationError.value);
+
+const applyCoords = async (lat: number, lng: number) => {
+  position.value = { lat, lng };
+  internalLocationError.value = "";
+  emit("update:position", lat, lng);
+  emit("update:location-error", "");
+
+  try {
+    const region = await getRegionName(lat, lng);
+    if (region?.address) {
+      locationText.value = `${region.address.city ?? ""} ${region.address.borough ?? ""} ${region.address.suburb ?? ""}`.trim();
+    }
+  } catch {
+    // 주소 변환 실패 시 기존 텍스트 유지
+  }
+
+  fetchWeather(lat, lng);
+};
 
 // 기상청 API 응답을 받아 현재 카드에 필요한 형태로 변환한다.
 const fetchWeather = async (lat: number, lng: number) => {
@@ -177,30 +198,21 @@ const convertWeatherToObject = (ncstData: Record<string, string>, fcstData?: Rec
   };
 };
 
-onMounted(async () => {
-  if (props.initialLat && props.initialLng) {
-    position.value = {
-      lat: props.initialLat,
-      lng: props.initialLng,
-    };
-    locationError.value = "";
-
-    // 저장된 좌표 기준으로 위치 텍스트 설정
-    try {
-      const region = await getRegionName(props.initialLat, props.initialLng);
-      if (region?.address) {
-        locationText.value = `${region.address.city ?? ""} ${region.address.borough ?? ""} ${region.address.suburb ?? ""}`.trim();
-      }
-    } catch {
-      // 실패 시 텍스트는 비워 둠
+watch(
+  () => [props.initialLat, props.initialLng] as const,
+  async ([lat, lng]) => {
+    if (typeof lat === "number" && typeof lng === "number" && lat !== 0 && lng !== 0) {
+      await applyCoords(lat, lng);
     }
+  },
+  { immediate: true }
+);
 
-    emit("update:position", props.initialLat, props.initialLng);
-    emit("update:location-error", "");
-    fetchWeather(props.initialLat, props.initialLng);
-  } else {
-    locationError.value = "위치 정보를 가져올 수 없습니다.";
-    emit("update:location-error", locationError.value);
+onMounted(() => {
+  // 좌표가 없으면 index.vue에서 좌표가 들어올 때까지 기다린다.
+  if (!props.initialLat || !props.initialLng) {
+    internalLocationError.value = "위치 정보를 가져올 수 없습니다.";
+    emit("update:location-error", internalLocationError.value);
   }
 });
 </script>
