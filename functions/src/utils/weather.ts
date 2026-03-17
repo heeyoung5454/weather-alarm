@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { dfsXyConv } from './dfsXyConv';
 
 type VilageFcstItem = { category: string; fcstValue: string };
 type VilageFcstResponse = {
@@ -12,26 +13,35 @@ type VilageFcstResponse = {
 };
 
 export const getVilageFcst = async (
-  nx: number,
-  ny: number,
+  lat: number,
+  lon: number,
   baseDate: string,
   baseTime: string,
+  serviceKey: string,
 ) => {
-  const serviceKey = process.env.WEATHER_API_KEY;
+  // data.go.kr serviceKey가 이미 URL-encode된 값일 수 있어, axios에서 재인코딩되면 인증 실패(401)할 수 있다.
+  // 가능하면 decode 후 사용한다.
+  let normalizedKey = serviceKey;
+  try {
+    normalizedKey = decodeURIComponent(serviceKey);
+  } catch {
+    // 원본 유지
+  }
+  const grid = dfsXyConv('toXY', lat, lon);
 
   const url =
     'https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst';
 
   const res = await axios.get(url, {
     params: {
-      serviceKey,
+      serviceKey: normalizedKey,
       numOfRows: 1000,
       pageNo: 1,
       dataType: 'JSON',
       base_date: baseDate,
       base_time: baseTime,
-      nx,
-      ny,
+      nx: grid.x,
+      ny: grid.y,
     },
   });
 

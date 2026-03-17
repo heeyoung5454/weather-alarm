@@ -1,5 +1,6 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
+import { defineSecret } from 'firebase-functions/params';
 import { getVilageFcst } from './utils/weather';
 import { getVilageFcstBaseDateTime } from './utils/timeConvert';
 
@@ -9,13 +10,16 @@ type CachedWeather = {
   rain: number;
 };
 
+const WEATHER_API_KEY = defineSecret('WEATHER_API_KEY');
+
 /**
  * 🌦 날씨 캐싱 스케줄러
  */
 export const cacheRegionWeather = onSchedule(
   {
-    schedule: '*/10 * * * *', // 30분마다 실행
+    schedule: '*/30 * * * *', // 30분마다 실행
     timeZone: 'Asia/Seoul',
+    secrets: [WEATHER_API_KEY],
   },
   async () => {
     console.log('🌦 날씨 캐싱 시작');
@@ -45,6 +49,7 @@ export const cacheRegionWeather = onSchedule(
               lon,
               baseDate,
               baseTime,
+              WEATHER_API_KEY.value(),
             )) as CachedWeather;
 
             // undefined 제거
