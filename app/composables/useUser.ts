@@ -22,7 +22,6 @@ export const saveUser = async (user: any, token: string, coords?: Coords) => {
     await setDoc(ref, {
       email: user.email,
       name: user.displayName,
-      pushEnabled: false,
       createdAt: new Date(),
       ...baseData,
     });
@@ -34,4 +33,3 @@ export const saveUser = async (user: any, token: string, coords?: Coords) => {
     console.log("기존 사용자 토큰/위치 업데이트");
   }
 };
-
