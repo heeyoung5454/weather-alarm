@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "rootDir": "src",
     "module": "NodeNext",
     "esModuleInterop": true,
     "moduleResolution": "nodenext",

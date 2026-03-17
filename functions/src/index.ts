@@ -3,9 +3,11 @@ import * as admin from 'firebase-admin';
 
 admin.initializeApp();
 
+export { cacheRegionWeather } from './weatherScheduler';
+
 export const alarmPush = onSchedule(
   {
-    schedule: '0-59/5 * * * *',
+    schedule: '0-59/5 * * * *', // 5분마다 실행
     timeZone: 'Asia/Seoul',
   },
   async () => {
@@ -19,8 +21,10 @@ export const alarmPush = onSchedule(
       hour12: false,
     });
     const parts = formatter.formatToParts(now);
-    const hour = parts.find((p) => p.type === 'hour')?.value.padStart(2, '0') ?? '00';
-    const minute = parts.find((p) => p.type === 'minute')?.value.padStart(2, '0') ?? '00';
+    const hour =
+      parts.find((p) => p.type === 'hour')?.value.padStart(2, '0') ?? '00';
+    const minute =
+      parts.find((p) => p.type === 'minute')?.value.padStart(2, '0') ?? '00';
     const currentTime = `${hour}:${minute}`;
 
     const snapshot = await db
