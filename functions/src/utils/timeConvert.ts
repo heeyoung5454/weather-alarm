@@ -68,3 +68,26 @@ export const getUltraSrtBaseDateTime = () => {
   return { baseDate, baseTime };
 };
 
+/**
+ * 초단기예보 조회 기준 날짜/시간 조회
+ * - 기상청 초단기예보는 30분 단위 발표 + 반영 지연이 있어, 안전하게 40분 이전 시각의 "시 정각"으로 계산
+ * @return {{ fctBaseDate: string, fctBaseTime: string }}
+ */
+export const getUltraSrtFcstBaseDateTime = () => {
+  // Cloud Functions 런타임은 UTC일 수 있어 KST로 계산한다.
+  const now = new Date();
+  const kstMs = now.getTime() + 9 * 60 * 60 * 1000;
+  const kst = new Date(kstMs);
+
+  // 40분 이전 기준
+  kst.setUTCMinutes(kst.getUTCMinutes() - 40);
+
+  const fctBaseDate =
+    kst.getUTCFullYear().toString() +
+    (kst.getUTCMonth() + 1).toString().padStart(2, '0') +
+    kst.getUTCDate().toString().padStart(2, '0');
+  const fctBaseTime = kst.getUTCHours().toString().padStart(2, '0') + '00';
+
+  return { fctBaseDate, fctBaseTime };
+};
+

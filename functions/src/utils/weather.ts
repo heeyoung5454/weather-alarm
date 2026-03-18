@@ -70,23 +70,55 @@ export const getUltraSrtNcst = async (
     if (item.category === 'PTY' && item.obsrValue) pty = item.obsrValue;
   });
 
-  const ptyMap: Record<string, string> = {
-    '0': '맑음', // 강수 없음일 때는 SKY가 없으니 기본을 맑음으로 둔다.
-    '1': '비',
-    '2': '비/눈',
-    '3': '눈',
-    '5': '빗방울',
-    '6': '빗방울/눈날림',
-    '7': '눈날림',
-  };
-
   return {
     temp: Number(t1h),
-    sky: ptyMap[pty] ?? '정보 없음',
     rain: Number(pty),
     baseDate,
     baseTime,
   };
+};
+
+export const getUltraSrtFcst = async (
+  lat: number,
+  lon: number,
+  baseDate: string,
+  baseTime: string,
+  serviceKey: string,
+) => {
+  const normalizedKey = normalizeServiceKey(serviceKey);
+  const grid = dfsXyConv('toXY', lat, lon);
+
+  const url =
+    'https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtFcst';
+
+  const res = await axios.get(url, {
+    params: {
+      serviceKey: normalizedKey,
+      numOfRows: 60,
+      pageNo: 1,
+      dataType: 'JSON',
+      base_date: baseDate,
+      base_time: baseTime,
+      nx: grid.x,
+      ny: grid.y,
+    },
+  });
+
+  const items = (res.data as unknown as WeatherResponse)?.response?.body?.items
+    ?.item;
+  if (!Array.isArray(items)) {
+    throw new Error('Invalid weather response');
+  }
+
+  // 가장 먼저 나오는 SKY 값을 사용 (app/notiWeather와 동일한 방식)
+  let sky = '';
+  items.forEach((item) => {
+    if (item.category === 'SKY' && item.fcstValue && !sky) {
+      sky = item.fcstValue;
+    }
+  });
+
+  return { sky };
 };
 
 export const getVilageFcst = async (

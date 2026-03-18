@@ -27,7 +27,6 @@
             v-for="region in regions"
             :key="region.name"
             class="region-area"
-            :class="{ active: selectedRegion === region.name }"
             :style="{
               left: `${region.position.x}%`,
               top: `${region.position.y}%`,
@@ -38,77 +37,11 @@
               <div class="region-label">{{ region.name }}</div>
               <div class="region-weather">
                 <div class="current-temp">{{ region.data?.current?.temp }}°</div>
-                <div class="region-icon">{{ getWeatherEmoji(region.data?.current?.sky) }}</div>
+                <div class="region-icon">{{ getWeatherEmoji(region.data?.current?.sky, region.data?.current?.rain) }}</div>
               </div>
             </div>
           </div>
         </div>
-
-        <!-- 선택된 지역의 상세 날씨 정보 -->
-        <transition name="slide-up">
-          <div v-if="selectedRegionData" class="weather-detail-card">
-            <div class="detail-header">
-              <div class="header-left">
-                <h3 class="detail-title">{{ selectedRegion }}</h3>
-                <div class="current-weather">
-                  <span class="current-temp-large">{{ selectedRegionData.current?.temp }}°C</span>
-                  <span class="current-emoji">{{ getWeatherEmoji(selectedRegionData.current?.sky) }}</span>
-                </div>
-              </div>
-              <button class="close-button" @click="selectedRegion = null">✕</button>
-            </div>
-
-            <div class="detail-content">
-              <!-- 오전 날씨 -->
-              <div class="detail-section">
-                <div class="section-header">
-                  <span class="section-icon">🌅</span>
-                  <span class="section-title">오전</span>
-                </div>
-                <div class="weather-info">
-                  <div class="weather-main">
-                    <div class="weather-emoji">{{ getWeatherEmoji(selectedRegionData.am?.sky) }}</div>
-                    <div class="weather-temp">{{ selectedRegionData.am?.temp }}°C</div>
-                  </div>
-                  <div class="weather-details">
-                    <div class="detail-item">
-                      <span class="detail-label">강수확률</span>
-                      <span class="detail-value">{{ selectedRegionData.am?.pop }}%</span>
-                    </div>
-                    <div class="detail-item">
-                      <span class="detail-label">날씨</span>
-                      <span class="detail-value">{{ getWeatherText(selectedRegionData.am?.sky) }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 오후 날씨 -->
-              <div class="detail-section">
-                <div class="section-header">
-                  <span class="section-icon">🌇</span>
-                  <span class="section-title">오후</span>
-                </div>
-                <div class="weather-info">
-                  <div class="weather-main">
-                    <div class="weather-emoji">{{ getWeatherEmoji(selectedRegionData.pm?.sky) }}</div>
-                    <div class="weather-temp">{{ selectedRegionData.pm?.temp }}°C</div>
-                  </div>
-                  <div class="weather-details">
-                    <div class="detail-item">
-                      <span class="detail-label">강수확률</span>
-                      <span class="detail-value">{{ selectedRegionData.pm?.pop }}%</span>
-                    </div>
-                    <div class="detail-item">
-                      <span class="detail-label">날씨</span>
-                      <span class="detail-value">{{ getWeatherText(selectedRegionData.pm?.sky) }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </transition>
 
         <!-- 범례 -->
         <div class="legend">
@@ -140,7 +73,7 @@ import { collection, getDocs } from "firebase/firestore";
 import { useRegions } from "../../composables/useRegions";
 
 interface RegionWeatherData {
-  current?: { temp: string; sky: string };
+  current?: { temp: string; sky: string; rain?: number };
   am?: { sky: string; temp: string; pop: string };
   pm?: { sky: string; temp: string; pop: string };
 }
@@ -153,32 +86,29 @@ interface Region {
 
 const isLoading = ref(true);
 const regions = ref<Region[]>([]);
-const selectedRegion = ref<string | null>(null);
 const { regionsByName, fetchRegions } = useRegions();
 // @ts-ignore - Nuxt auto-import
 const router = useRouter();
 // @ts-ignore - Nuxt auto-import
 const { $db } = useNuxtApp();
 
-// 선택된 지역의 날씨 데이터
-const selectedRegionData = computed(() => {
-  if (!selectedRegion.value) return null;
-  const region = regions.value.find((r) => r.name === selectedRegion.value);
-  return region?.data || null;
-});
-
 // 지역 선택 함수 - 상세 날씨 페이지로 이동
 const selectRegion = (regionName: string) => {
-  selectedRegion.value = regionName;
   router.push(`/alarm/notiWeather?region=${encodeURIComponent(regionName)}`);
 };
 
 // 하늘 상태 코드에 따른 이모지 반환
-const getWeatherEmoji = (sky?: string) => {
+// - cache의 rain(PTY)이 있으면 강수를 우선 표시한다.
+const getWeatherEmoji = (sky?: string, rain?: number | string) => {
+  const r = rain === undefined || rain === null ? undefined : Number(rain);
+  if (r !== undefined && !Number.isNaN(r) && r > 0) {
+    if (r === 3 || r === 7) return "❄️";
+    if (r === 2 || r === 6) return "🌨️";
+    return "🌧️";
+  }
+
   if (!sky) return "❓";
-  // code or text 모두 지원
-  if (sky === "0" || sky === "맑음") return "☀️";
-  if (sky === "1" || sky === "비") return "💧";
+  if (sky === "1" || sky === "맑음") return "☀️";
   if (sky === "3" || sky === "구름많음") return "🌤️";
   if (sky === "4" || sky === "흐림") return "☁️";
   return "❓";
@@ -209,7 +139,7 @@ const loadNationalWeather = async () => {
   const regionMap = regionsByName.value;
   const regionNames = Object.keys(regionMap);
   const cacheSnap = await getDocs(collection($db, "regionWeatherCache"));
-  const cacheByName: Record<string, { temp?: number; sky?: string; updatedAt?: any }> = {};
+  const cacheByName: Record<string, { temp?: number; sky?: string; rain?: number; updatedAt?: any }> = {};
   cacheSnap.docs.forEach((d) => {
     cacheByName[d.id] = d.data() as any;
   });
@@ -224,6 +154,7 @@ const loadNationalWeather = async () => {
         current: {
           temp: cached?.temp !== undefined ? String(cached.temp) : "-",
           sky: cached?.sky ?? "",
+          rain: cached?.rain ?? 0,
         },
       },
     };
@@ -394,10 +325,6 @@ onMounted(async () => {
   white-space: nowrap;
 }
 
-.region-area.active .region-label {
-  color: white;
-}
-
 .region-weather {
   display: flex;
   align-items: center;
@@ -410,194 +337,8 @@ onMounted(async () => {
   color: #2c83c9;
 }
 
-.region-area.active .current-temp {
-  color: white;
-}
-
 .region-icon {
   font-size: 22px;
-}
-
-/* 상세 날씨 카드 */
-.weather-detail-card {
-  margin-top: 24px;
-  width: 100%;
-  max-width: 700px;
-  margin-left: auto;
-  margin-right: auto;
-  background: #ffffffee;
-  backdrop-filter: blur(8px);
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 8px 24px rgba(29, 76, 122, 0.2);
-  animation: slideUp 0.3s ease-out;
-  box-sizing: border-box;
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.slide-up-enter-active,
-.slide-up-leave-active {
-  transition: all 0.3s ease;
-}
-
-.slide-up-enter-from {
-  opacity: 0;
-  transform: translateY(20px);
-}
-
-.slide-up-leave-to {
-  opacity: 0;
-  transform: translateY(-20px);
-}
-
-.detail-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  padding-bottom: 12px;
-  border-bottom: 2px solid #d0e4f5;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.detail-title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 800;
-  color: #17446d;
-}
-
-.current-weather {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  background: #f0f7ff;
-  border-radius: 8px;
-}
-
-.current-temp-large {
-  font-size: 24px;
-  font-weight: 800;
-  color: #2c83c9;
-}
-
-.current-emoji {
-  font-size: 28px;
-}
-
-.close-button {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: none;
-  background: #f0f7ff;
-  color: #5a7a94;
-  font-size: 18px;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.close-button:hover {
-  background: #2c83c9;
-  color: white;
-  transform: rotate(90deg);
-}
-
-.detail-content {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-}
-
-.detail-section {
-  background: #f6fbff;
-  border-radius: 12px;
-  padding: 16px;
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.section-icon {
-  font-size: 20px;
-}
-
-.section-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #17446d;
-}
-
-.weather-info {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.weather-main {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.weather-emoji {
-  font-size: 48px;
-}
-
-.weather-temp {
-  font-size: 32px;
-  font-weight: 800;
-  color: #2c83c9;
-}
-
-.weather-details {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.detail-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  background: white;
-  border-radius: 8px;
-}
-
-.detail-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #5a7a94;
-}
-
-.detail-value {
-  font-size: 14px;
-  font-weight: 700;
-  color: #17446d;
 }
 
 .legend {
@@ -654,30 +395,6 @@ onMounted(async () => {
 
   .region-icon {
     font-size: 18px;
-  }
-
-  .detail-title {
-    font-size: 18px;
-  }
-
-  .current-temp-large {
-    font-size: 20px;
-  }
-
-  .current-emoji {
-    font-size: 24px;
-  }
-
-  .detail-content {
-    grid-template-columns: 1fr;
-  }
-
-  .weather-emoji {
-    font-size: 36px;
-  }
-
-  .weather-temp {
-    font-size: 24px;
   }
 }
 </style>

@@ -1,8 +1,8 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
 import { defineSecret } from 'firebase-functions/params';
-import { getUltraSrtNcst } from './utils/weather';
-import { getUltraSrtBaseDateTime } from './utils/timeConvert';
+import { getUltraSrtFcst, getUltraSrtNcst } from './utils/weather';
+import { getUltraSrtBaseDateTime, getUltraSrtFcstBaseDateTime } from './utils/timeConvert';
 
 type CachedWeather = {
   temp: number;
@@ -10,6 +10,8 @@ type CachedWeather = {
   rain: number;
   baseDate: string;
   baseTime: string;
+  fcstBaseDate?: string;
+  fcstBaseTime?: string;
 };
 
 const WEATHER_API_KEY = defineSecret('WEATHER_API_KEY');
@@ -46,13 +48,32 @@ export const cacheRegionWeather = onSchedule(
 
           try {
             const { baseDate, baseTime } = getUltraSrtBaseDateTime();
-            const weather = (await getUltraSrtNcst(
+            const ncst = (await getUltraSrtNcst(
               lat,
               lon,
               baseDate,
               baseTime,
               WEATHER_API_KEY.value(),
-            )) as CachedWeather;
+            )) as Omit<CachedWeather, 'sky'>;
+
+            const { fctBaseDate, fctBaseTime } = getUltraSrtFcstBaseDateTime();
+            const fcst = await getUltraSrtFcst(
+              lat,
+              lon,
+              fctBaseDate,
+              fctBaseTime,
+              WEATHER_API_KEY.value(),
+            );
+
+            const weather: CachedWeather = {
+              temp: ncst.temp,
+              rain: ncst.rain,
+              sky: fcst.sky ?? '',
+              baseDate,
+              baseTime,
+              fcstBaseDate: fctBaseDate,
+              fcstBaseTime: fctBaseTime,
+            };
 
             // undefined 제거
             const cleanedWeather = Object.fromEntries(
