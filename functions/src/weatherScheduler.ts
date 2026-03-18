@@ -19,7 +19,7 @@ const WEATHER_API_KEY = defineSecret('WEATHER_API_KEY');
  */
 export const cacheRegionWeather = onSchedule(
   {
-    schedule: '*/30 * * * *', // 30분마다 실행
+    schedule: '*/15 * * * *', // 15분마다 실행
     timeZone: 'Asia/Seoul',
     secrets: [WEATHER_API_KEY],
   },
