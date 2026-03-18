@@ -177,7 +177,8 @@ const selectRegion = (regionName: string) => {
 const getWeatherEmoji = (sky?: string) => {
   if (!sky) return "❓";
   // code or text 모두 지원
-  if (sky === "1" || sky === "맑음") return "☀️";
+  if (sky === "0" || sky === "맑음") return "☀️";
+  if (sky === "1" || sky === "비") return "💧";
   if (sky === "3" || sky === "구름많음") return "🌤️";
   if (sky === "4" || sky === "흐림") return "☁️";
   return "❓";
