@@ -43,25 +43,6 @@
           </div>
         </div>
 
-        <!-- 범례 -->
-        <div class="legend">
-          <div class="legend-item">
-            <span class="legend-icon">☀️</span>
-            <span class="legend-text">맑음</span>
-          </div>
-          <div class="legend-item">
-            <span class="legend-icon">🌤️</span>
-            <span class="legend-text">구름많음</span>
-          </div>
-          <div class="legend-item">
-            <span class="legend-icon">☁️</span>
-            <span class="legend-text">흐림</span>
-          </div>
-          <div class="legend-item">
-            <span class="legend-icon">💧</span>
-            <span class="legend-text">강수확률</span>
-          </div>
-        </div>
       </div>
     </div>
   </div>
@@ -99,18 +80,17 @@ const selectRegion = (regionName: string) => {
 
 // 하늘 상태 코드에 따른 이모지 반환
 // - cache의 rain(PTY)이 있으면 강수를 우선 표시한다.
-const getWeatherEmoji = (sky?: string, rain?: number | string) => {
-  const r = rain === undefined || rain === null ? undefined : Number(rain);
-  if (r !== undefined && !Number.isNaN(r) && r > 0) {
-    if (r === 3 || r === 7) return "❄️";
-    if (r === 2 || r === 6) return "🌨️";
-    return "🌧️";
-  }
+const getWeatherEmoji = (sky?: string, pty?: number | string) => {
+  // 1. 강수 우선
+  if (pty === 1) return "🌧️"; // 비
+  if (pty === 2) return "🌨️"; // 비/눈
+  if (pty === 3) return "❄️"; // 눈
+  if (pty === 4) return "🌦️"; // 소나기
 
-  if (!sky) return "❓";
-  if (sky === "1" || sky === "맑음") return "☀️";
-  if (sky === "3" || sky === "구름많음") return "🌤️";
-  if (sky === "4" || sky === "흐림") return "☁️";
+  // 2. 하늘 상태 우선
+  if (sky === "1") return "☀️";
+  if (sky === "3") return "🌤️";
+  if (sky === "4") return "☁️";
   return "❓";
 };
 
@@ -339,32 +319,6 @@ onMounted(async () => {
 
 .region-icon {
   font-size: 22px;
-}
-
-.legend {
-  display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
-  justify-content: center;
-  padding: 16px;
-  background: #f6fbff;
-  border-radius: 12px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.legend-icon {
-  font-size: 18px;
-}
-
-.legend-text {
-  font-size: 13px;
-  font-weight: 600;
-  color: #5a7a94;
 }
 
 @media (max-width: 768px) {

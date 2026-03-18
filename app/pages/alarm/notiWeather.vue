@@ -9,12 +9,7 @@
         </NuxtLink>
         <NuxtLink to="/" class="icon-link primary" aria-label="홈">
           <svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-            <path
-              d="M3 10.5L12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-6a2 2 0 0 0-2-2H11a2 2 0 0 0-2 2v6H4a1 1 0 0 1-1-1V10.5Z"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linejoin="round"
-            />
+            <path d="M3 10.5L12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-6a2 2 0 0 0-2-2H11a2 2 0 0 0-2 2v6H4a1 1 0 0 1-1-1V10.5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
           </svg>
         </NuxtLink>
       </div>
@@ -43,8 +38,9 @@
         <section v-else>
           <div class="weather-card">
             <p class="now-time">{{ nowDate }} {{ nowTime }} 기준</p>
-            <div class="weather-icon" :class="getWeatherIcon(weatherList?.sky?.value)" aria-hidden="true"></div>
-            <p class="weather-text">{{ weatherList?.sky?.text }}</p>
+
+            <div class="weather-icon" :class="getWeatherIcon(weatherList?.sky?.value, weatherList?.pty?.value)" aria-hidden="true"></div>
+            <p class="weather-text">{{ weatherList?.pty?.value !== "0" ? weatherList?.pty?.text : weatherList?.sky?.text }}</p>
             <p class="temperature">{{ weatherList?.t1h?.value ? weatherList.t1h.value + "°C" : "" }}</p>
           </div>
 
@@ -114,10 +110,19 @@ const PTYMap: Record<string, string> = {
   "7": "눈날림",
 };
 
-const getWeatherIcon = (sky?: string) => {
+const getWeatherIcon = (sky?: string, pty?: string) => {
+  // 1. 강수형태(PTY)가 있으면 비/눈 아이콘 우선
+  if (pty && pty !== "0") {
+    // 비, 비/눈, 빗방울 계열은 비 아이콘
+    if (pty === "1" || pty === "2" || pty === "5" || pty === "6") return "icon-rainy";
+    // 눈 계열
+    if (pty === "3" || pty === "7") return "icon-snow";
+  }
+
+  // 2. PTY 없으면 하늘 상태(SKY) 기준
   if (sky === "1") return "icon-sunny";
-  if (sky === "3") return "icon-cloudy";
-  if (sky === "4") return "icon-rainy";
+  if (sky === "3") return "icon-suncloudy"; // 구름많음
+  if (sky === "4") return "icon-cloudy"; // 흐림
   return "unknown";
 };
 
@@ -297,10 +302,7 @@ const fetchWeather = async () => {
       return;
     }
 
-    const byTimeVilage = new Map<
-      string,
-      { dateStr: string; timeStr: string; sky: string; tmp: string }
-    >();
+    const byTimeVilage = new Map<string, { dateStr: string; timeStr: string; sky: string; tmp: string }>();
     vilageItems.forEach((item) => {
       const key = `${item.fcstDate}_${item.fcstTime}`;
       const timeStr = item.fcstTime.padStart(4, "0");
@@ -508,6 +510,14 @@ onMounted(async () => {
   background: url("@/assets/images/icon-rainy.png") no-repeat center center / contain;
 }
 
+.weather-icon.icon-snow {
+  background: url("@/assets/images/icon-snow.png") no-repeat center center / contain;
+}
+
+.weather-icon.icon-suncloudy {
+  background: url("@/assets/images/icon-suncloudy.png") no-repeat center center / contain;
+}
+
 .weather-text {
   margin: 0;
   font-size: 22px;
@@ -618,6 +628,14 @@ onMounted(async () => {
 
 .hourly-icon.icon-rainy {
   background: url("@/assets/images/icon-rainy.png") no-repeat center center / contain;
+}
+
+.hourly-icon.icon-snow {
+  background: url("@/assets/images/icon-snow.png") no-repeat center center / contain;
+}
+
+.hourly-icon.icon-suncloudy {
+  background: url("@/assets/images/icon-suncloudy.png") no-repeat center center / contain;
 }
 
 .hourly-temp {
