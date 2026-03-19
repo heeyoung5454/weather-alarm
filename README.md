@@ -1,80 +1,33 @@
-# Nuxt Minimal Starter
+# Weather Alarm
 
-Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+지역/현재 위치 기준 날씨 조회, 알림 설정, 푸시 알림 기능을 제공하는 Nuxt 기반 프로젝트입니다.
 
-## Setup
+## 실행 방법
 
-Make sure to install dependencies:
+의존성 설치:
 
 ```bash
-# npm
 npm install
-
-# pnpm
-pnpm install
-
-# yarn
-yarn install
-
-# bun
-bun install
 ```
 
-## Development Server
-
-Start the development server on `http://localhost:3000`:
+개발 서버 실행:
 
 ```bash
-# npm
 npm run dev
-
-# pnpm
-pnpm dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
 ```
 
-## Production
+기본 접속 주소: `https://weatheralarm-155bf.web.app/`
 
-Build the application for production:
+## 기술 스택
 
-```bash
-# npm
-npm run build
+- Frontend: `Nuxt 4`, `Vue 3`, `TypeScript`
+- Backend/Infra: `Firebase` (Auth, Firestore, Cloud Functions, Cloud Messaging)
+- Weather API: 공공데이터포털 기상청 예보 API (`VilageFcstInfoService_2.0`)
 
-# pnpm
-pnpm build
+## 핵심 기능
 
-# yarn
-yarn build
-
-# bun
-bun run build
-```
-
-Locally preview production build:
-
-```bash
-# npm
-npm run preview
-
-# pnpm
-pnpm preview
-
-# yarn
-yarn preview
-
-# bun
-bun run preview
-```
-
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
-
-# etc
-
-인증: Firebase Authentication
-푸시: Firebase Cloud Messaging (FCM 토큰)
+- 현재 위치/지역 파라미터 기준 현재 날씨, 시간대별(3시간 간격), 주간 날씨 조회
+- 전국 지역 날씨 캐시(`regionWeatherCache`) 기반 지도형 조회
+- 알림 시간/지역/활성화 설정 및 즉시 Firestore 반영
+- 사용자별 강수 알림 ON/OFF 설정(`users.isPush`)
+- 스케줄러 기반 예보 저장(`users.Forecast`) 및 강수 예보 푸시 알림 전송
