@@ -1,7 +1,10 @@
 <template>
   <div class="container">
     <div class="header">
-      <h2>알림</h2>
+      <h2 class="header-title">
+        <span class="title-icon" aria-hidden="true">🔔</span>
+        <span>알림</span>
+      </h2>
       <button class="add-btn" @click="addAlarm">+</button>
     </div>
 
@@ -16,13 +19,13 @@
           </div>
 
           <label class="switch">
-            <input type="checkbox" v-model="alarm.enabled" />
+            <input type="checkbox" v-model="alarm.enabled" @change="persistAlarm(alarm)" />
             <span class="slider"></span>
           </label>
         </div>
 
         <div class="alarm-sub">
-          <select v-model="alarm.region">
+          <select v-model="alarm.region" @change="persistAlarm(alarm)">
             <option v-for="region in regionKeys" :key="region" :value="region">
               {{ region }}
             </option>
@@ -64,12 +67,22 @@
       </div>
     </div>
 
-    <button class="save-btn" @click="saveSetting">저장</button>
+    <ConfirmDialog
+      :visible="isDeleteDialogOpen"
+      title="알림 삭제"
+      message="삭제하시겠습니까?"
+      confirm-text="확인"
+      cancel-text="취소"
+      @confirm="confirmRemoveAlarm"
+      @cancel="closeDeleteDialog"
+    />
+
   </div>
 </template>
 
 <script setup lang="ts">
 import { collection, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs } from "firebase/firestore";
+import ConfirmDialog from "../../../components/ConfirmDialog.vue";
 
 import { ref, onMounted } from "vue";
 import { onAuthStateChanged } from "firebase/auth";
@@ -87,6 +100,8 @@ const alarms = ref<any[]>([]);
 // 5분 단위 시간 선택용 상태
 const isTimePickerOpen = ref(false);
 const editingIndex = ref<number | null>(null);
+const isDeleteDialogOpen = ref(false);
+const deleteTargetIndex = ref<number | null>(null);
 const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
 const minutes = ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"];
 const pickerHour = ref("07");
@@ -111,27 +126,63 @@ const closeTimePicker = () => {
 const confirmTime = () => {
   if (editingIndex.value === null) return;
   const time = `${pickerHour.value}:${pickerMinute.value}`;
-  alarms.value[editingIndex.value].time = time;
+  const targetAlarm = alarms.value[editingIndex.value];
+  targetAlarm.time = time;
+  persistAlarm(targetAlarm);
   closeTimePicker();
 };
 
 const defaultAlarm = () => ({
-  id: crypto.randomUUID(),
   time: "07:00",
   region: "서울",
   enabled: true,
-  isNew: true,
 });
 
 /* 알람 추가 */
-const addAlarm = () => {
-  alarms.value.push(defaultAlarm());
+const addAlarm = async () => {
+  const user = $auth.currentUser;
+  if (!user) return;
+
+  const token = await getCurrentFcmToken(user);
+  if (!token) {
+    alert("알림 권한을 허용해주세요. 설정에서 알림을 켜주세요.");
+    return;
+  }
+
+  const alarm = defaultAlarm();
+  const refDoc = await addDoc(collection($db, "alarms"), {
+    uid: user.uid,
+    token,
+    time: alarm.time,
+    region: alarm.region,
+    enabled: alarm.enabled,
+    createdAt: new Date(),
+  });
+
+  alarms.value.push({
+    id: refDoc.id,
+    ...alarm,
+    isNew: false,
+  });
 };
 
 /* 알람 삭제 */
 const removeAlarm = async (index: number) => {
+  deleteTargetIndex.value = index;
+  isDeleteDialogOpen.value = true;
+};
+
+const closeDeleteDialog = () => {
+  isDeleteDialogOpen.value = false;
+  deleteTargetIndex.value = null;
+};
+
+const confirmRemoveAlarm = async () => {
+  if (deleteTargetIndex.value === null) return;
+  const index = deleteTargetIndex.value;
   await deleteDoc(doc($db, "alarms", alarms.value[index].id));
   alarms.value.splice(index, 1);
+  closeDeleteDialog();
 };
 
 /* 현재 FCM 토큰 가져오기 (없으면 발급 후 동기화) */
@@ -147,41 +198,20 @@ const getCurrentFcmToken = async (user: any): Promise<string | null> => {
   return token;
 };
 
-/* 알람 저장 */
-const saveSetting = async () => {
+/* 알람 변경 즉시 저장 */
+const persistAlarm = async (alarm: any) => {
   const user = $auth.currentUser;
   if (!user) return;
 
   const token = await getCurrentFcmToken(user);
-  if (!token) {
-    alert("알림 권한을 허용해주세요. 설정에서 알림을 켜주세요.");
-    return;
-  }
+  if (!token || !alarm?.id) return;
 
-  for (const alarm of alarms.value) {
-    if (alarm.isNew) {
-      const refDoc = await addDoc(collection($db, "alarms"), {
-        uid: user.uid,
-        token,
-        time: alarm.time,
-        region: alarm.region,
-        enabled: alarm.enabled,
-        createdAt: new Date(),
-      });
-
-      alarm.id = refDoc.id;
-      alarm.isNew = false;
-    } else {
-      await updateDoc(doc($db, "alarms", alarm.id), {
-        token,
-        time: alarm.time,
-        region: alarm.region,
-        enabled: alarm.enabled,
-      });
-    }
-  }
-
-  alert("알림 저장 완료");
+  await updateDoc(doc($db, "alarms", alarm.id), {
+    token,
+    time: alarm.time,
+    region: alarm.region,
+    enabled: alarm.enabled,
+  });
 };
 
 /* 알람 불러오기 */
@@ -219,6 +249,10 @@ onMounted(() => {
   margin: auto;
   padding: 20px;
   font-family: -apple-system, BlinkMacSystemFont;
+  background: #ffffffd9;
+  backdrop-filter: blur(4px);
+  border-radius: 24px;
+  box-shadow: 0 12px 30px rgba(29, 76, 122, 0.2);
 }
 
 .header {
@@ -231,17 +265,31 @@ onMounted(() => {
 .header h2 {
   font-size: 22px;
   font-weight: 700;
+  margin: 0;
+  color: #17446d;
+}
+
+.header-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title-icon {
+  font-size: 18px;
+  line-height: 1;
 }
 
 .add-btn {
-  font-size: 26px;
+  font-size: 24px;
   border: none;
   background: none;
+  color: #222;
   cursor: pointer;
 }
 
 .alarm-item {
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #d8e7f3;
   padding: 18px 0;
 }
 
@@ -446,15 +494,4 @@ input:checked + .slider:before {
   transform: translateX(22px);
 }
 
-.save-btn {
-  width: 100%;
-  margin-top: 30px;
-  padding: 14px;
-  border-radius: 10px;
-  border: none;
-  background: #111;
-  color: white;
-  font-size: 16px;
-  font-weight: 600;
-}
 </style>
