@@ -183,3 +183,38 @@ export const getVilageFcst = async (
     rain: Number(rain),
   };
 };
+
+export const getVilageFcstItems = async (
+  lat: number,
+  lon: number,
+  baseDate: string,
+  baseTime: string,
+  serviceKey: string,
+) => {
+  const normalizedKey = normalizeServiceKey(serviceKey);
+  const grid = dfsXyConv('toXY', lat, lon);
+
+  const url =
+    'https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst';
+
+  const res = await axios.get(url, {
+    params: {
+      serviceKey: normalizedKey,
+      numOfRows: 1000,
+      pageNo: 1,
+      dataType: 'JSON',
+      base_date: baseDate,
+      base_time: baseTime,
+      nx: grid.x,
+      ny: grid.y,
+    },
+  });
+
+  const items = (res.data as unknown as WeatherResponse)?.response?.body?.items
+    ?.item;
+  if (!Array.isArray(items)) {
+    throw new Error('Invalid weather response');
+  }
+
+  return items;
+};

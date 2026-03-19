@@ -4,6 +4,7 @@ import * as admin from 'firebase-admin';
 admin.initializeApp();
 
 export { cacheRegionWeather } from './weatherScheduler';
+export { cacheUserWeather } from './userWeatherScheduler';
 
 export const alarmPush = onSchedule(
   {

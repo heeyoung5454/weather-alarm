@@ -24,6 +24,15 @@
         @update:location-error="handleLocationError"
       />
 
+      <div class="push-toggle-wrap">
+        <div class="push-toggle-row">
+          <span class="push-toggle-label">강수 알림</span>
+          <button type="button" class="push-toggle-btn" :class="{ on: isPushEnabled }" :disabled="pushToggleLoading || !isLoggedIn" @click="togglePushSetting">
+            <span class="toggle-thumb"></span>
+          </button>
+        </div>
+      </div>
+
       <!-- 주간 날씨 -->
       <WeeklyWeather :lat="position.lat" :lng="position.lng" :location-error="locationError" />
 
@@ -44,7 +53,7 @@ import WeeklyWeather from "./weather/components/WeeklyWeather.vue";
 import ToastMessage from "../components/ToastMessage.vue";
 
 import { ref, onMounted } from "vue";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 
 import { useGoogleLogin } from "../composables/useGoogleLogin";
@@ -62,6 +71,9 @@ const hasSavedLocation = ref(false);
 const currentReady = ref(false);
 const toastVisible = ref(false);
 const toastMessage = ref("");
+const isPushEnabled = ref(false);
+const pushToggleLoading = ref(false);
+const isLoggedIn = ref(false);
 
 const handlePositionUpdate = (lat: number, lng: number) => {
   position.value = { lat, lng };
@@ -77,6 +89,34 @@ const router = useRouter();
 const { $auth, $db } = useNuxtApp();
 
 const { getCurrentLocation } = useLocation();
+
+const togglePushSetting = async () => {
+  const user = $auth.currentUser;
+  if (!user) {
+    toastMessage.value = "로그인 후 사용 가능합니다.";
+    toastVisible.value = true;
+    setTimeout(() => {
+      toastVisible.value = false;
+    }, 2000);
+    return;
+  }
+
+  try {
+    pushToggleLoading.value = true;
+    const nextValue = !isPushEnabled.value;
+    const userRef = doc($db, "users", user.uid);
+    await setDoc(userRef, { isPush: nextValue }, { merge: true });
+    isPushEnabled.value = nextValue;
+  } catch {
+    toastMessage.value = "푸시 설정 변경에 실패했습니다.";
+    toastVisible.value = true;
+    setTimeout(() => {
+      toastVisible.value = false;
+    }, 2000);
+  } finally {
+    pushToggleLoading.value = false;
+  }
+};
 
 const refreshLocation = async () => {
   try {
@@ -105,6 +145,8 @@ const refreshLocation = async () => {
 onMounted(() => {
   onAuthStateChanged($auth, async (user) => {
     if (!user) {
+      isLoggedIn.value = false;
+      isPushEnabled.value = false;
       // 비로그인: 여기서 한 번만 현재 위치를 가져온다.
       try {
         const coords = await getCurrentLocation();
@@ -117,6 +159,8 @@ onMounted(() => {
       return;
     }
 
+    isLoggedIn.value = true;
+
     const ref = doc($db, "users", user.uid);
     const snap = await getDoc(ref);
     if (snap.exists()) {
@@ -125,6 +169,19 @@ onMounted(() => {
         position.value = { lat: data.lat, lng: data.lng };
         hasSavedLocation.value = true;
       }
+      isPushEnabled.value = data.isPush === true;
+    } else {
+      await setDoc(
+        ref,
+        {
+          email: user.email ?? "",
+          name: user.displayName ?? "",
+          isPush: false,
+          createdAt: new Date(),
+        },
+        { merge: true }
+      );
+      isPushEnabled.value = false;
     }
 
     currentReady.value = true;
@@ -272,18 +329,82 @@ const startAlarm = async () => {
   gap: 24px;
 }
 
+.push-toggle-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -6px;
+  margin-bottom: -10px;
+}
+
+.push-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: #ffffffd9;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 4px 12px rgba(29, 76, 122, 0.12);
+}
+
+.push-toggle-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #17446d;
+}
+
+.push-toggle-btn {
+  width: 52px;
+  height: 30px;
+  border-radius: 999px;
+  border: none;
+  background: #c8d7e3;
+  padding: 3px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.push-toggle-btn.on {
+  background: #2c83c9;
+}
+
+.push-toggle-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.toggle-thumb {
+  display: block;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  transform: translateX(0);
+  transition: transform 0.2s ease;
+}
+
+.push-toggle-btn.on .toggle-thumb {
+  transform: translateX(22px);
+}
+
 .alarm-setting-btn {
+  position: fixed;
+  left: 18px;
+  bottom: 18px;
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  width: 100%;
-  padding: 16px 24px;
+  width: auto;
+  padding: 12px 14px;
   border: none;
-  border-radius: 16px;
+  border-radius: 999px;
   background: linear-gradient(135deg, #2c83c9 0%, #17446d 100%);
   color: white;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
   box-shadow: 0 4px 14px rgba(44, 131, 201, 0.4);
   cursor: pointer;
@@ -319,8 +440,10 @@ const startAlarm = async () => {
   }
 
   .alarm-setting-btn {
-    padding: 14px 20px;
-    font-size: 15px;
+    left: 12px;
+    bottom: 12px;
+    padding: 10px 12px;
+    font-size: 13px;
   }
 
   .alarm-icon {

@@ -22,6 +22,7 @@ export const saveUser = async (user: any, token: string, coords?: Coords) => {
     await setDoc(ref, {
       email: user.email,
       name: user.displayName,
+      isPush: false,
       createdAt: new Date(),
       ...baseData,
     });
