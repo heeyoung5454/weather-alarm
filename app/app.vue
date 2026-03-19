@@ -3,6 +3,7 @@
     <NuxtLayout>
       <NuxtPage />
     </NuxtLayout>
+    <AppFooter />
 
     <!-- FCM Token 토글 버튼 -->
     <button v-if="fcmToken" @click="showToken = !showToken" class="token-toggle-button">
@@ -29,6 +30,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { usePush } from "./composables/usePush";
+import AppFooter from "./components/AppFooter.vue";
 
 const fcmToken = ref("");
 const copied = ref(false);

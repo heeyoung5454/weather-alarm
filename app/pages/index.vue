@@ -229,7 +229,7 @@ const startAlarm = async () => {
 
 <style scoped>
 .page {
-  min-height: 100vh;
+  min-height: calc(100vh - 156px);
   display: flex;
   align-items: center;
   justify-content: center;

@@ -150,7 +150,7 @@ onMounted(async () => {
 
 <style scoped>
 .national-weather-page {
-  min-height: 100vh;
+  min-height: calc(100vh - 156px);
   background: linear-gradient(180deg, #8ed0ff 0%, #d9f0ff 50%, #f6fbff 100%);
   padding: 24px;
   box-sizing: border-box;
