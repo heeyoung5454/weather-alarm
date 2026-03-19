@@ -1,31 +1,14 @@
 <template>
-  <section class="weather-card">
-    <!-- 로딩 오버레이 -->
-    <div v-if="isLoading" class="loading-overlay">
-      <div class="spinner"></div>
-      <p class="loading-text">날씨 정보를 불러오는 중...</p>
-    </div>
-
-    <!-- 위치 에러 메시지 -->
-    <div v-if="displayLocationError" class="location-error-full">
-      {{ displayLocationError }}
-    </div>
-
-    <!-- 날씨 정보 (위치 에러가 없을 때만 표시) -->
-    <template v-if="!displayLocationError">
-      <div class="location-row">
-        <span class="gps-icon" aria-hidden="true"></span>
-        <p class="location-text">{{ locationText }}</p>
-      </div>
-      <p class="now-time">{{ nowDate }} {{ nowTime }} 기준</p>
-
-      <!-- 날씨 아이콘 -->
-      <div class="weather-icon" :class="getWeatherIcon(weatherList?.sky?.value)" aria-hidden="true"></div>
-
-      <p class="weather-text">{{ weatherError || weatherList?.sky?.text }}</p>
-      <p class="temperature">{{ weatherList?.t1h?.value ? weatherList?.t1h?.value + "°C" : "" }}</p>
-    </template>
-  </section>
+  <WeatherSummaryCard
+    :loading="isLoading"
+    :error-overlay-text="displayLocationError || ''"
+    :location-text="locationText"
+    :now-date="nowDate"
+    :now-time="nowTime"
+    :icon-class="getWeatherIcon(weatherList?.sky?.value)"
+    :weather-text="weatherError || weatherList?.sky?.text || ''"
+    :temperature-text="weatherList?.t1h?.value ? weatherList?.t1h?.value + '°C' : ''"
+  />
 </template>
 
 <script setup lang="ts">
@@ -33,6 +16,7 @@ import { onMounted, ref, watch, computed } from "vue";
 import { getRegionName } from "../../../utils/reverseGeo";
 import { getUltraSrtNcst, getUltraSrtFcst } from "../../../composables/useWeather";
 import { getBaseDateTime, getFcstBaseTime } from "../../../utils/timeConvert";
+import WeatherSummaryCard from "../../../components/WeatherSummaryCard.vue";
 
 const props = defineProps<{
   initialLat?: number;
@@ -49,8 +33,8 @@ const emit = defineEmits<{
 // 하늘 상태 코드로 아이콘 클래스를 매핑한다.
 const getWeatherIcon = (sky: string) => {
   if (sky === "1") return "icon-sunny";
-  if (sky === "3") return "icon-cloudy";
-  if (sky === "4") return "icon-rainy";
+  if (sky === "3") return "icon-suncloudy";
+  if (sky === "4") return "icon-cloudy";
   return "unknown";
 };
 

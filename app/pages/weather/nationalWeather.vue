@@ -42,7 +42,6 @@
             </div>
           </div>
         </div>
-
       </div>
     </div>
   </div>
@@ -323,7 +322,7 @@ onMounted(async () => {
 
 @media (max-width: 768px) {
   .national-weather-page {
-    padding: 16px;
+    padding: 24px 16px;
   }
 
   .content-container {

@@ -46,6 +46,8 @@
         </div>
       </div>
 
+      <HourlyWeatherSection :lat="position.lat" :lng="position.lng" />
+
       <!-- 주간 날씨 -->
       <WeeklyWeather :lat="position.lat" :lng="position.lng" :location-error="locationError" />
 
@@ -65,6 +67,7 @@ import CurrentWeather from "./weather/components/CurrentWeather.vue";
 import WeeklyWeather from "./weather/components/WeeklyWeather.vue";
 import ToastMessage from "../components/ToastMessage.vue";
 import InfoTooltip from "../components/InfoTooltip.vue";
+import HourlyWeatherSection from "../components/HourlyWeatherSection.vue";
 
 import { ref, onMounted } from "vue";
 import { doc, getDoc, setDoc } from "firebase/firestore";
