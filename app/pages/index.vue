@@ -23,11 +23,24 @@
         @update:position="handlePositionUpdate"
         @update:location-error="handleLocationError"
       />
+      <div v-else class="current-loading-card">
+        <div class="spinner"></div>
+        <p class="loading-text">날씨 정보를 불러오는 중...</p>
+      </div>
 
       <div class="push-toggle-wrap">
         <div class="push-toggle-row">
-          <span class="push-toggle-label">강수 알림</span>
-          <button type="button" class="push-toggle-btn" :class="{ on: isPushEnabled }" :disabled="pushToggleLoading || !isLoggedIn" @click="togglePushSetting">
+          <div class="push-label-wrap">
+            <span class="push-toggle-label">강수 알림</span>
+            <InfoTooltip text="3시간뒤 비 예보 알림" label="강수 알림 안내" />
+          </div>
+          <button
+            type="button"
+            class="push-toggle-btn"
+            :class="{ on: isPushEnabled }"
+            :disabled="pushToggleLoading || !isLoggedIn"
+            @click="togglePushSetting"
+          >
             <span class="toggle-thumb"></span>
           </button>
         </div>
@@ -51,6 +64,7 @@
 import CurrentWeather from "./weather/components/CurrentWeather.vue";
 import WeeklyWeather from "./weather/components/WeeklyWeather.vue";
 import ToastMessage from "../components/ToastMessage.vue";
+import InfoTooltip from "../components/InfoTooltip.vue";
 
 import { ref, onMounted } from "vue";
 import { doc, getDoc, setDoc } from "firebase/firestore";
@@ -329,6 +343,43 @@ const startAlarm = async () => {
   gap: 24px;
 }
 
+.current-loading-card {
+  width: 100%;
+  min-height: 332px;
+  border-radius: 24px;
+  background: #ffffffd9;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 12px 30px #1d4c7a29;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  box-sizing: border-box;
+}
+
+.spinner {
+  width: 42px;
+  height: 42px;
+  border: 4px solid #d9f0ff;
+  border-top-color: #2c83c9;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-text {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #4c6f8f;
+}
+
 .push-toggle-wrap {
   display: flex;
   justify-content: flex-end;
@@ -346,6 +397,12 @@ const startAlarm = async () => {
   background: #ffffffd9;
   backdrop-filter: blur(4px);
   box-shadow: 0 4px 12px rgba(29, 76, 122, 0.12);
+}
+
+.push-label-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .push-toggle-label {
