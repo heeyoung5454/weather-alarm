@@ -125,6 +125,7 @@ const toastMessage = ref("");
 const isPushEnabled = ref(false);
 const pushToggleLoading = ref(false);
 const isLoggedIn = ref<boolean | null>(null);
+const syncedFcmUid = ref<string | null>(null);
 const loginLoading = ref(false);
 const userName = ref("");
 const isConsentModalOpen = ref(false);
@@ -151,6 +152,39 @@ const router = useRouter();
 const { $auth, $db } = useNuxtApp();
 
 const { getCurrentLocation } = useLocation();
+
+const syncFcmTokenOnLogin = async (user: any) => {
+  const uid = user?.uid;
+  if (!uid) return;
+  if (syncedFcmUid.value === uid) return;
+  syncedFcmUid.value = uid;
+
+  // 이미 디바이스에 저장된 토큰이 있으면, 권한 프롬프트 없이 우선 users에 반영
+  let token = localStorage.getItem("fcmToken") || "";
+
+  // localStorage에 없으면 로그인 시점에 토큰 발급/동기화 시도
+  if (!token) {
+    token = (await usePush()) ?? "";
+  }
+
+  token = typeof token === "string" ? token.trim() : "";
+  if (!token) return;
+
+  localStorage.setItem("fcmToken", token);
+
+  // users 문서에 이미 저장된 위치가 있으면 함께 저장
+  const canUseCoords =
+    typeof position.value?.lat === "number" &&
+    typeof position.value?.lng === "number" &&
+    position.value.lat !== 0 &&
+    position.value.lng !== 0;
+
+  if (canUseCoords) {
+    await saveUser(user, token, { lat: position.value.lat, lng: position.value.lng });
+  } else {
+    await saveUser(user, token);
+  }
+};
 
 const togglePushSetting = async () => {
   const user = $auth.currentUser;
@@ -236,6 +270,7 @@ onMounted(() => {
       isLoggedIn.value = false;
       userName.value = "";
       isPushEnabled.value = false;
+      syncedFcmUid.value = null;
       // 비로그인: 여기서 한 번만 현재 위치를 가져온다.
       try {
         const coords = await getCurrentLocation();
@@ -260,6 +295,9 @@ onMounted(() => {
         hasSavedLocation.value = true;
       }
       isPushEnabled.value = data.isPush === true;
+
+      // 로그인 직후: 현재 디바이스 토큰을 users/{uid}.fcmTokens에 동기화
+      await syncFcmTokenOnLogin(user);
     } else {
       await setDoc(
         ref,
@@ -273,6 +311,9 @@ onMounted(() => {
       );
       userName.value = user.displayName ?? "";
       isPushEnabled.value = false;
+
+      // 사용자 문서가 새로 생성된 직후에도 토큰을 바로 반영
+      await syncFcmTokenOnLogin(user);
     }
 
     currentReady.value = true;
