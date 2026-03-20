@@ -8,6 +8,7 @@
     :icon-class="getWeatherIcon(weatherList?.sky?.value)"
     :weather-text="weatherError || weatherList?.sky?.text || ''"
     :temperature-text="weatherList?.t1h?.value ? weatherList?.t1h?.value + '°C' : ''"
+    @refresh-location="emit('refresh-location')"
   />
 </template>
 
@@ -28,6 +29,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "update:position", lat: number, lng: number): void;
   (e: "update:location-error", error: string): void;
+  (e: "refresh-location"): void;
 }>();
 
 // 하늘 상태 코드로 아이콘 클래스를 매핑한다.

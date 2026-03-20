@@ -1,11 +1,31 @@
 <template>
   <main class="page">
     <div class="page-content">
+   
+
       <!-- 상단 영역 -->
       <div class="header-section">
-        <button type="button" class="gps-refresh-btn" @click="refreshLocation" aria-label="현재 위치 업데이트">
-          <span class="gps-refresh-icon" aria-hidden="true"></span>
+        <button
+          v-if="isLoggedIn === true"
+          type="button"
+          class="header-logout-btn"
+          @click="goToAccount"
+          aria-label="My"
+        >
+          <span class="alarm-icon">👤</span>
+          <span class="alarm-label">My</span>
         </button>
+        <button
+          v-else-if="isLoggedIn === false"
+          type="button"
+          class="header-login-btn"
+          :disabled="loginLoading || isConsentModalOpen"
+          @click="openConsentModal"
+        >
+          <span class="alarm-icon">🔑</span>
+          <span class="alarm-label">구글 로그인</span>
+        </button>
+        
         <NuxtLink to="/weather/nationalWeather" class="national-weather-link">
           <span class="link-text">전국날씨</span>
           <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -22,6 +42,7 @@
         :use-saved-location="hasSavedLocation"
         @update:position="handlePositionUpdate"
         @update:location-error="handleLocationError"
+        @refresh-location="refreshLocation"
       />
       <div v-else class="current-loading-card">
         <div class="spinner"></div>
@@ -38,7 +59,7 @@
             type="button"
             class="push-toggle-btn"
             :class="{ on: isPushEnabled }"
-            :disabled="pushToggleLoading || !isLoggedIn"
+            :disabled="pushToggleLoading || isLoggedIn !== true"
             @click="togglePushSetting"
           >
             <span class="toggle-thumb"></span>
@@ -52,12 +73,24 @@
       <WeeklyWeather :lat="position.lat" :lng="position.lng" :location-error="locationError" />
 
       <!-- 알림설정 버튼 -->
-      <button type="button" class="alarm-setting-btn" @click="startAlarm">
+      <button type="button" class="alarm-setting-btn" @click="startAlarm" v-if="isLoggedIn === true">
         <span class="alarm-icon">🔔</span>
         <span class="alarm-label">알림설정</span>
       </button>
 
       <ToastMessage :message="toastMessage" :visible="toastVisible" />
+     
+
+      <ConfirmDialog
+        :visible="isConsentModalOpen"
+        title="동의 안내"
+        :message="consentMessage"
+        confirm-text="동의"
+        cancel-text="취소"
+        @confirm="confirmConsentAndLogin"
+        @cancel="closeConsentModal"
+      />
+    
     </div>
   </main>
 </template>
@@ -68,6 +101,7 @@ import WeeklyWeather from "./weather/components/WeeklyWeather.vue";
 import ToastMessage from "../components/ToastMessage.vue";
 import InfoTooltip from "../components/InfoTooltip.vue";
 import HourlyWeatherSection from "../components/HourlyWeatherSection.vue";
+import ConfirmDialog from "../components/ConfirmDialog.vue";
 
 import { ref, onMounted } from "vue";
 import { doc, getDoc, setDoc } from "firebase/firestore";
@@ -90,7 +124,18 @@ const toastVisible = ref(false);
 const toastMessage = ref("");
 const isPushEnabled = ref(false);
 const pushToggleLoading = ref(false);
-const isLoggedIn = ref(false);
+const isLoggedIn = ref<boolean | null>(null);
+const loginLoading = ref(false);
+const userName = ref("");
+const isConsentModalOpen = ref(false);
+
+const consentMessage = `알림 서비스를 이용하기 위해 로그인이 필요합니다.
+
+로그인 시 아래 정보를 수집합니다:
+- 이메일 주소
+- 이름
+
+수집된 정보는 알림 제공 및 서비스 운영에만 사용됩니다.`;
 
 const handlePositionUpdate = (lat: number, lng: number) => {
   position.value = { lat, lng };
@@ -135,6 +180,32 @@ const togglePushSetting = async () => {
   }
 };
 
+const handleGoogleLogin = async () => {
+  try {
+    loginLoading.value = true;
+    await useGoogleLogin();
+  } finally {
+    loginLoading.value = false;
+  }
+};
+
+const goToAccount = () => {
+  router.push("/account");
+};
+
+const openConsentModal = () => {
+  isConsentModalOpen.value = true;
+};
+
+const closeConsentModal = () => {
+  isConsentModalOpen.value = false;
+};
+
+const confirmConsentAndLogin = async () => {
+  closeConsentModal();
+  await handleGoogleLogin();
+};
+
 const refreshLocation = async () => {
   try {
     const coords = await getCurrentLocation();
@@ -163,6 +234,7 @@ onMounted(() => {
   onAuthStateChanged($auth, async (user) => {
     if (!user) {
       isLoggedIn.value = false;
+      userName.value = "";
       isPushEnabled.value = false;
       // 비로그인: 여기서 한 번만 현재 위치를 가져온다.
       try {
@@ -182,6 +254,7 @@ onMounted(() => {
     const snap = await getDoc(ref);
     if (snap.exists()) {
       const data: any = snap.data();
+      userName.value = data?.name ?? user.displayName ?? "";
       if (typeof data.lat === "number" && typeof data.lng === "number") {
         position.value = { lat: data.lat, lng: data.lng };
         hasSavedLocation.value = true;
@@ -198,6 +271,7 @@ onMounted(() => {
         },
         { merge: true }
       );
+      userName.value = user.displayName ?? "";
       isPushEnabled.value = false;
     }
 
@@ -346,6 +420,51 @@ const startAlarm = async () => {
   gap: 24px;
 }
 
+.login-top {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.user-name-text {
+  margin: 0;
+  width: 100%;
+  text-align: center;
+  padding: 10px 16px;
+  border-radius: 18px;
+  background: #ffffffd9;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 4px 12px rgba(29, 76, 122, 0.12);
+  color: #17446d;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.google-login-btn {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(135deg, #2c83c9 0%, #17446d 100%);
+  color: white;
+  font-size: 14px;
+  font-weight: 800;
+  box-shadow: 0 4px 14px rgba(44, 131, 201, 0.35);
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+}
+
+.google-login-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.google-login-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(44, 131, 201, 0.45);
+}
+
 .current-loading-card {
   width: 100%;
   min-height: 332px;
@@ -478,6 +597,70 @@ const startAlarm = async () => {
 
 .alarm-setting-btn:active {
   transform: translateY(0);
+}
+
+.header-login-btn {
+  width: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #2c83c9 0%, #17446d 100%);
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(44, 131, 201, 0.4);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.header-login-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(44, 131, 201, 0.5);
+}
+
+.header-login-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.header-login-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.header-logout-btn {
+  width: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: none;
+  border-radius: 999px;
+  background: #ffebeb;
+  color: #b91c1c;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(255, 0, 0, 0.12);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.header-logout-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 0, 0, 0.18);
+}
+
+.header-logout-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.header-logout-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .alarm-icon {

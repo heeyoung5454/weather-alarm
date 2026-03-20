@@ -9,12 +9,21 @@
       {{ errorOverlayText }}
     </div>
 
-    <template v-if="!errorOverlayText">
-      <div v-if="locationText" class="location-row">
-        <span class="gps-icon" aria-hidden="true"></span>
-        <p class="location-text">{{ locationText }}</p>
-      </div>
+    <!--
+      errorOverlayText가 있어도 gps 아이콘만 보이게 하기
+      (텍스트/날씨 영역은 기존처럼 에러일 때 숨김)
+    -->
+    <div v-if="errorOverlayText || locationText" class="location-row">
+      <button
+        type="button"
+        class="gps-icon"
+        aria-label="현재 위치 업데이트"
+        @click="$emit('refresh-location')"
+      ></button>
+      <p class="location-text">{{ errorOverlayText ? '현재 위치 업데이트 ' : locationText }}</p>
+    </div>
 
+    <template v-if="!errorOverlayText">
       <p class="now-time">{{ nowDate }} {{ nowTime }} 기준</p>
       <div class="weather-icon" :class="iconClass" aria-hidden="true"></div>
       <p class="weather-text">{{ weatherText }}</p>
@@ -46,6 +55,10 @@ withDefaults(
     locationText: "",
   }
 );
+
+defineEmits<{
+  (e: "refresh-location"): void;
+}>();
 </script>
 
 <style scoped>
@@ -123,15 +136,25 @@ withDefaults(
   gap: 8px;
   color: #17446d;
   font-weight: 600;
+  position: relative;
+  z-index: 6; /* location-error-full(기본 z-index: 5) 위로 아이콘 노출 */
 }
 
 .gps-icon {
+  appearance: none;
+  border: 2px solid #2c83c9;
+  background: transparent;
   position: relative;
   width: 18px;
   height: 18px;
-  border: 2px solid #2c83c9;
   border-radius: 50%;
   box-sizing: border-box;
+  cursor: pointer;
+}
+
+.gps-icon:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 .gps-icon::before,

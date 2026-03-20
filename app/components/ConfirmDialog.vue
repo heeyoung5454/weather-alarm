@@ -66,6 +66,7 @@ withDefaults(
   font-size: 14px;
   color: #4b5b6a;
   line-height: 1.5;
+  white-space: pre-line;
 }
 
 .confirm-actions {
