@@ -20,6 +20,37 @@
           <span class="value">{{ userName }}</span>
         </p>
 
+        <div class="tokens-section">
+          <p class="section-title">등록 디바이스 (FCM 토큰)</p>
+          <p class="hint" v-if="fcmTokenEntries.length === 0">등록된 토큰이 없습니다.</p>
+
+          <div v-else class="tokens-list">
+            <div v-for="(t, idx) in fcmTokenEntries" :key="t.token + '_' + idx" class="token-item">
+              <span v-if="t.token === currentToken" class="token-badge">현재 디바이스</span>
+              <button
+                type="button"
+                class="device-toggle-btn"
+                :class="{ on: t.enabled !== false }"
+                :disabled="logoutLoading"
+                @click="toggleDevicePush(t.token, !(t.enabled !== false))"
+              >
+                {{ t.enabled !== false ? "알림 ON" : "알림 OFF" }}
+              </button>
+              <span class="token-index">{{ idx + 1 }}</span>
+              <div class="token-main">
+                <code class="token-text">{{ maskToken(t.token) }}</code>
+                <div class="token-meta">
+                  <p class="meta-line"><span class="meta-key">UA</span><span class="meta-val">{{ t.meta?.ua || "-" }}</span></p>
+                  <p class="meta-line"><span class="meta-key">플랫폼</span><span class="meta-val">{{ t.meta?.platform || "-" }}</span></p>
+                  <p class="meta-line"><span class="meta-key">언어</span><span class="meta-val">{{ t.meta?.lang || "-" }}</span></p>
+                  <p class="meta-line"><span class="meta-key">타임존</span><span class="meta-val">{{ t.meta?.tz || "-" }}</span></p>
+                  <p class="meta-line"><span class="meta-key">화면</span><span class="meta-val">{{ t.meta?.screen || "-" }}</span></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <button type="button" class="logout-btn" :disabled="logoutLoading" @click="handleLogout">
           로그아웃
         </button>
@@ -41,7 +72,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 
 // @ts-ignore - Nuxt auto-import
@@ -53,10 +84,151 @@ const isLoggedIn = ref<boolean | null>(null);
 const userEmail = ref("");
 const userName = ref("");
 const logoutLoading = ref(false);
+type DeviceMeta = {
+  ua?: string;
+  platform?: string;
+  lang?: string;
+  tz?: string;
+  screen?: string;
+  dpr?: number;
+};
 
-const handleLogout = async () => {
+type FcmTokenEntry = {
+  token: string;
+  meta?: DeviceMeta;
+  enabled?: boolean;
+};
+
+const fcmTokenEntries = ref<FcmTokenEntry[]>([]);
+const currentToken = ref("");
+
+const maskToken = (token: string) => {
+  const t = token.trim();
+  if (t.length <= 10) return t;
+  return `${t.slice(0, 10)}...${t.slice(-6)}`;
+};
+
+const normalizeFcmTokenEntries = (raw: any): FcmTokenEntry[] => {
+  if (!Array.isArray(raw)) return [];
+
+  const out: FcmTokenEntry[] = [];
+  for (const item of raw) {
+    if (typeof item === "string") {
+      const token = item.trim();
+      if (token) out.push({ token, meta: {}, enabled: true });
+      continue;
+    }
+    if (item && typeof item === "object" && typeof item.token === "string") {
+      const token = item.token.trim();
+      if (token)
+        out.push({
+          token,
+          meta: item.meta ?? {},
+          enabled: typeof item.enabled === "boolean" ? item.enabled : true,
+        });
+    }
+  }
+  return out;
+};
+
+const toggleDevicePush = async (token: string, enabled: boolean) => {
+  const currentUser = $auth.currentUser;
+  const uid = currentUser?.uid;
+  if (!uid) return;
+
   try {
     logoutLoading.value = true;
+    const refDoc = doc($db, "users", uid);
+    const snap = await getDoc(refDoc);
+    if (!snap.exists()) return;
+
+    const data: any = snap.data() || {};
+    const entriesFromArray = normalizeFcmTokenEntries(data?.fcmTokens);
+    const legacyToken =
+      typeof data?.fcmToken === "string" && data.fcmToken.trim().length > 0 ? data.fcmToken.trim() : "";
+
+    const merged = Array.from(
+      new Map(
+        [
+          ...(entriesFromArray ?? []),
+          ...(legacyToken ? [{ token: legacyToken, meta: {}, enabled: true }] : []),
+        ].map((e) => [e.token, e] as const)
+      ).values()
+    );
+
+    const next = merged.map((e) =>
+      e.token === token
+        ? {
+            ...e,
+            enabled,
+          }
+        : e
+    );
+
+    const updatePayload: any = {
+      fcmTokens: next.map((e) => ({
+        token: e.token,
+        meta: e.meta ?? {},
+        enabled: e.enabled !== false,
+      })),
+      fcmToken: next[0]?.token ?? "",
+    };
+
+    await updateDoc(refDoc, updatePayload);
+    fcmTokenEntries.value = next;
+  } finally {
+    logoutLoading.value = false;
+  }
+};
+
+const handleLogout = async () => {
+  const currentUser = $auth.currentUser;
+  const uid = currentUser?.uid;
+  const currentToken = localStorage.getItem("fcmToken") || "";
+
+  try {
+    logoutLoading.value = true;
+
+    // 로그아웃해도 users 문서에 남아 있으면 다른 디바이스에서도 계속 푸시가 갈 수 있어
+    // 현재 디바이스 토큰만 제거합니다.
+    if (uid && currentToken) {
+      try {
+        const refDoc = doc($db, "users", uid);
+        const snap = await getDoc(refDoc);
+        if (snap.exists()) {
+          const data: any = snap.data() || {};
+          const entriesFromArray = normalizeFcmTokenEntries(data.fcmTokens);
+          const legacyToken =
+            typeof data.fcmToken === "string" && data.fcmToken.trim().length > 0 ? data.fcmToken.trim() : "";
+
+          const merged = Array.from(
+            new Map(
+              [
+                ...(entriesFromArray ?? []),
+                ...(legacyToken ? [{ token: legacyToken, meta: {}, enabled: true }] : []),
+              ].map((e) => [e.token, e] as const)
+            ).values()
+          );
+
+          const next = merged.filter((e) => e.token !== currentToken);
+
+          const updatePayload: any = {
+            fcmTokens: next.map((e) => ({
+              token: e.token,
+              meta: e.meta ?? {},
+              enabled: e.enabled !== false,
+            })),
+          };
+          updatePayload.fcmToken = next[0]?.token ?? "";
+
+          await updateDoc(refDoc, updatePayload);
+        }
+      } catch {
+        // users 문서가 없거나 필드가 아직 없을 수 있음
+      }
+      localStorage.removeItem("fcmToken");
+    }
+
     await signOut($auth);
     router.push("/");
   } finally {
@@ -70,11 +242,14 @@ onMounted(() => {
       isLoggedIn.value = false;
       userEmail.value = "";
       userName.value = "";
+      fcmTokenEntries.value = [];
+      currentToken.value = "";
       return;
     }
 
     isLoggedIn.value = true;
     userEmail.value = user.email ?? "";
+    currentToken.value = localStorage.getItem("fcmToken") || "";
 
     // Firestore `users` 문서의 name을 우선 사용
     try {
@@ -83,11 +258,27 @@ onMounted(() => {
       if (snap.exists()) {
         const data: any = snap.data();
         userName.value = data?.name ?? user.displayName ?? "";
+
+        const entriesFromArray = normalizeFcmTokenEntries(data?.fcmTokens);
+        const legacyToken =
+          typeof data?.fcmToken === "string" && data.fcmToken.trim().length > 0 ? data.fcmToken.trim() : "";
+
+        const merged = Array.from(
+          new Map(
+            [
+              ...(entriesFromArray ?? []),
+              ...(legacyToken ? [{ token: legacyToken, meta: {}, enabled: true }] : []),
+            ].map((e) => [e.token, e] as const)
+          ).values()
+        );
+        fcmTokenEntries.value = merged;
       } else {
         userName.value = user.displayName ?? "";
+        fcmTokenEntries.value = [];
       }
     } catch {
       userName.value = user.displayName ?? "";
+      fcmTokenEntries.value = [];
     }
   });
 });
@@ -216,6 +407,124 @@ onMounted(() => {
 .logout-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.tokens-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 8px 0 4px;
+}
+
+.section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 900;
+  color: #17446d;
+}
+
+.tokens-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.token-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: #ffffffcc;
+  border: 1px solid #d8e7f3;
+}
+
+.device-toggle-btn {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border-radius: 999px;
+  border: none;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #edf2f6;
+  color: #4b5b6a;
+}
+
+.device-toggle-btn.on {
+  background: #d9f0ff;
+  color: #17446d;
+}
+
+.device-toggle-btn:not(.on) {
+  background: #ffe9e9;
+  color: #b91c1c;
+}
+
+.token-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.token-badge {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 900;
+  color: #17446d;
+  background: #d9f0ff;
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
+.token-index {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 800;
+  color: #4b5b6a;
+  padding-top: 2px;
+}
+
+.token-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #2f3f55;
+  word-break: break-all;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+.token-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.meta-line {
+  margin: 0;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.meta-key {
+  flex: 0 0 auto;
+  width: 56px;
+  font-size: 12px;
+  font-weight: 900;
+  color: #17446d;
+}
+
+.meta-val {
+  flex: 1 1 auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: #4b5b6a;
+  word-break: break-word;
 }
 
 .back-btn {

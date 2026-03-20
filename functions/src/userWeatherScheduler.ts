@@ -99,21 +99,47 @@ export const cacheUserWeather = onSchedule(
             );
 
             // 요청 조건: 3시간 뒤 강수(PTY)가 있으면 푸시 전송
-            const token =
-              typeof data.fcmToken === 'string' ? data.fcmToken : '';
             const isPushEnabled = data.isPush === true;
-            if (forecast.rain > 0 && token && isPushEnabled) {
-              await admin.messaging().send({
-                token,
-                notification: {
-                  title: '강수 알림',
-                  body: '3시간 뒤 비가 올 예정입니다.',
-                },
-                data: {
-                  type: 'forecast_rain',
-                  rain: String(forecast.rain),
-                },
-              });
+
+            // 여러 디바이스 토큰 처리 (구형 fcmToken → fcmTokens 호환)
+            const tokensFromArray: string[] = Array.isArray(data.fcmTokens)
+              ? data.fcmTokens
+                  .flatMap((t: unknown) => {
+                    if (typeof t === "string") return t.trim().length > 0 ? [t] : [];
+                    if (t && typeof t === "object" && "token" in t) {
+                      // @ts-ignore
+                      const token = typeof t.token === "string" ? t.token.trim() : "";
+                      // enabled 값이 없으면 true로 취급
+                      // @ts-ignore
+                      const enabled = typeof t.enabled === "boolean" ? t.enabled : true;
+                      return token.length > 0 && enabled ? [token] : [];
+                    }
+                    return [];
+                  })
+                  .filter((t: unknown) => typeof t === "string" && t.trim().length > 0)
+              : [];
+            const tokenFromLegacy =
+              typeof data.fcmToken === 'string' && data.fcmToken.trim().length > 0
+                ? [data.fcmToken]
+                : [];
+            const tokens = Array.from(new Set([...tokenFromLegacy, ...tokensFromArray]));
+
+            if (forecast.rain > 0 && tokens.length > 0 && isPushEnabled) {
+              await Promise.all(
+                tokens.map((token) =>
+                  admin.messaging().send({
+                    token,
+                    notification: {
+                      title: '강수 알림',
+                      body: '3시간 뒤 비가 올 예정입니다.',
+                    },
+                    data: {
+                      type: 'forecast_rain',
+                      rain: String(forecast.rain),
+                    },
+                  })
+                )
+              );
             }
 
             console.log(`✅ 사용자 ${uid} Forecast 저장 완료`);

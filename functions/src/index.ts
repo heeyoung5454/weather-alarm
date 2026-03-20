@@ -35,28 +35,73 @@ export const alarmPush = onSchedule(
       .get();
 
     const baseUrl = 'https://weatheralarm-155bf.web.app';
+
+    // alarms 문서는 uid당 여러 토큰(users.fcmTokens)을 통해 모두 전송하도록 변경
+    const uidSet = new Set<string>();
+    snapshot.docs.forEach((d) => {
+      const alarm = d.data();
+      if (typeof alarm.uid === 'string' && alarm.uid.trim().length > 0) {
+        uidSet.add(alarm.uid);
+      }
+    });
+
+    const uids = Array.from(uidSet);
+    const userDocs = await Promise.all(
+      uids.map((uid) => db.collection('users').doc(uid).get())
+    );
+
+    const uidToTokens = new Map<string, string[]>();
+    userDocs.forEach((snap, idx) => {
+      const uid = uids[idx];
+      const data = snap.data() || {};
+      const tokensFromArray: string[] = Array.isArray(data.fcmTokens)
+        ? data.fcmTokens
+            .flatMap((t: unknown) => {
+              if (typeof t === "string") return t.trim().length > 0 ? [t] : [];
+              if (t && typeof t === "object" && "token" in t) {
+                // @ts-ignore
+                const token = typeof t.token === "string" ? t.token.trim() : "";
+                // @ts-ignore
+                const enabled = typeof t.enabled === "boolean" ? t.enabled : true;
+                return token.length > 0 && enabled ? [token] : [];
+              }
+              return [];
+            })
+            .filter((t: unknown) => typeof t === "string" && t.trim().length > 0)
+        : [];
+      const tokenFromLegacy =
+        typeof data.fcmToken === 'string' && data.fcmToken.trim().length > 0
+          ? [data.fcmToken]
+          : [];
+      const tokens = Array.from(new Set([...tokenFromLegacy, ...tokensFromArray]));
+      uidToTokens.set(uid, tokens);
+    });
+
     for (const doc of snapshot.docs) {
       const alarm = doc.data();
       const region = alarm.region || '서울';
+      const uid = alarm.uid;
 
-      if (!alarm.token) continue;
+      const tokens = typeof uid === 'string' ? uidToTokens.get(uid) || [] : [];
+      if (tokens.length === 0) continue;
 
       const url = `${baseUrl}/alarm/notiWeather?region=${encodeURIComponent(region)}`;
-      console.log('푸시 대상 토큰:', alarm.token, '지역:', region);
 
-      await admin.messaging().send({
-        token: alarm.token,
-        notification: {
-          title: '오늘 날씨 알림',
-          body: `${region} 날씨 확인하세요`,
-        },
-        data: {
-          url,
-          region,
-        },
-      });
-
-      console.log('푸시 보냄', region);
+      await Promise.all(
+        tokens.map((token) =>
+          admin.messaging().send({
+            token,
+            notification: {
+              title: '오늘 날씨 알림',
+              body: `${region} 날씨 확인하세요`,
+            },
+            data: {
+              url,
+              region,
+            },
+          })
+        )
+      );
     }
   },
 );
