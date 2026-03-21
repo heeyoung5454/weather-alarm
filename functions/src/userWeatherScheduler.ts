@@ -101,7 +101,7 @@ export const cacheUserWeather = onSchedule(
             // 요청 조건: 3시간 뒤 강수(PTY)가 있으면 푸시 전송
             const isPushEnabled = data.isPush === true;
 
-            // 여러 디바이스 토큰 처리 (구형 fcmToken → fcmTokens 호환)
+            // users.fcmTokens 배열 (enabled인 항목만)
             const tokensFromArray: string[] = Array.isArray(data.fcmTokens)
               ? data.fcmTokens
                   .flatMap((t: unknown) => {
@@ -118,11 +118,7 @@ export const cacheUserWeather = onSchedule(
                   })
                   .filter((t: unknown) => typeof t === "string" && t.trim().length > 0)
               : [];
-            const tokenFromLegacy =
-              typeof data.fcmToken === 'string' && data.fcmToken.trim().length > 0
-                ? [data.fcmToken]
-                : [];
-            const tokens = Array.from(new Set([...tokenFromLegacy, ...tokensFromArray]));
+            const tokens = Array.from(new Set(tokensFromArray));
 
             if (forecast.rain > 0 && tokens.length > 0 && isPushEnabled) {
               await Promise.all(

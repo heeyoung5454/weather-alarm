@@ -94,27 +94,6 @@ const userName = ref("");
 const logoutLoading = ref(false);
 const withdrawLoading = ref(false);
 const isWithdrawDialogOpen = ref(false);
-type DeviceMeta = {
-  // new schema
-  userAgent?: string;
-  appVersion?: string;
-  platform?: string;
-  screen?: string;
-
-  // legacy schema (existing DB에서 이미 들어있는 값들 fallback)
-  ua?: string;
-  lang?: string;
-  tz?: string;
-  innerWidth?: number;
-  innerHeight?: number;
-};
-
-type FcmTokenEntry = {
-  token: string;
-  meta?: DeviceMeta;
-  enabled?: boolean;
-};
-
 const fcmTokenEntries = ref<any[]>([]);
 const currentToken = ref("");
 
@@ -133,17 +112,14 @@ const maskToken = (token: string) => {
 };
 
 const getToken = (item: any): string => {
-  if (typeof item === "string") return item;
   return typeof item?.token === "string" ? item.token : "";
 };
 
 const getEnabled = (item: any): boolean => {
-  if (typeof item === "string") return true;
   return typeof item?.enabled === "boolean" ? item.enabled : true;
 };
 
 const getMeta = (item: any): any => {
-  if (typeof item === "string") return {};
   return item?.meta ?? {};
 };
 
@@ -170,29 +146,6 @@ const getScreenText = (item: any): string => {
   return "";
 };
 
-const normalizeFcmTokenEntries = (raw: any): FcmTokenEntry[] => {
-  if (!Array.isArray(raw)) return [];
-
-  const out: FcmTokenEntry[] = [];
-  for (const item of raw) {
-    if (typeof item === "string") {
-      const token = item.trim();
-      if (token) out.push({ token, meta: {}, enabled: true });
-      continue;
-    }
-    if (item && typeof item === "object" && typeof item.token === "string") {
-      const token = item.token.trim();
-      if (token)
-        out.push({
-          token,
-          meta: item.meta ?? {},
-          enabled: typeof item.enabled === "boolean" ? item.enabled : true,
-        });
-    }
-  }
-  return out;
-};
-
 const toggleDevicePush = async (token: string, enabled: boolean) => {
   const currentUser = $auth.currentUser;
   const uid = currentUser?.uid;
@@ -214,10 +167,6 @@ const toggleDevicePush = async (token: string, enabled: boolean) => {
           ...item,
           enabled,
         };
-      }
-      if (typeof item === "string" && item === token) {
-        // 레거시 토큰(string-only) 케이스: meta가 없으므로 enabled만 반영
-        return { token: item, enabled };
       }
       return item;
     });

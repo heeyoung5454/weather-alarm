@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { deleteField, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 
 type Coords = { lat: number; lng: number };
 
@@ -122,8 +122,6 @@ export const saveUser = async (user: any, token: string, coords?: Coords) => {
   if (!snapshot.exists()) {
     if (deviceEntry) {
       baseData.fcmTokens = [deviceEntry];
-      // 레거시 호환용
-      baseData.fcmToken = deviceEntry.token;
     }
   }
 
@@ -146,23 +144,17 @@ export const saveUser = async (user: any, token: string, coords?: Coords) => {
   } else {
     const current = snapshot.data() || {};
 
-    // 기존 fcmTokens가 string[] / object[] / 없음 / legacy fcmToken만 있을 수 있음
-    const legacyToken = typeof current?.fcmToken === "string" && current.fcmToken.trim().length > 0 ? current.fcmToken.trim() : "";
-
     let nextFcmTokens: FcmTokenEntry[] = [];
 
     if (Array.isArray(current?.fcmTokens)) {
       nextFcmTokens = normalizeFcmTokens(current.fcmTokens);
-    } else if (legacyToken) {
-      nextFcmTokens = [{ token: legacyToken, meta: {}, enabled: true }];
     }
 
     if (deviceEntry) {
-      // 기존에 들어있던 레거시 fcmToken도 token 중복 제거로 함께 반영
       const merged = upsertTokenEntry(nextFcmTokens, deviceEntry);
       nextFcmTokens = Array.from(new Map(merged.map((e) => [e.token, e])).values());
       baseData.fcmTokens = nextFcmTokens;
-      baseData.fcmToken = deviceEntry.token; // 레거시 호환
+      baseData.fcmToken = deleteField();
     }
 
     await updateDoc(ref, baseData);

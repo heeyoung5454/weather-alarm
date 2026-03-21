@@ -69,11 +69,7 @@ export const alarmPush = onSchedule(
             })
             .filter((t: unknown) => typeof t === "string" && t.trim().length > 0)
         : [];
-      const tokenFromLegacy =
-        typeof data.fcmToken === 'string' && data.fcmToken.trim().length > 0
-          ? [data.fcmToken]
-          : [];
-      const tokens = Array.from(new Set([...tokenFromLegacy, ...tokensFromArray]));
+      const tokens = Array.from(new Set(tokensFromArray));
       uidToTokens.set(uid, tokens);
     });
 
