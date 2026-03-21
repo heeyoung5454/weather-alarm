@@ -21,13 +21,30 @@
         </p>
 
         <div class="tokens-section">
-          <p class="section-title">등록 디바이스 (FCM 토큰)</p>
-          <p class="hint" v-if="fcmTokenEntries.length === 0">등록된 토큰이 없습니다.</p>
+          <p class="section-title">등록 디바이스</p>
+          <p class="hint" v-if="fcmTokenEntries.length === 0">등록된 디바이스가 없습니다.</p>
 
           <div v-else class="tokens-list">
             <div v-for="(t, idx) in displayedTokenEntries" :key="getToken(t) + '_' + idx" class="token-item" :class="{ current: getToken(t) === currentToken }">
               <span v-if="getToken(t) === currentToken" class="token-badge">현재 디바이스</span>
-              <button type="button" class="device-toggle-btn" :class="{ on: getEnabled(t) !== false }" :disabled="logoutLoading" @click="toggleDevicePush(getToken(t), !(getEnabled(t) !== false))">
+              <button
+                type="button"
+                class="token-remove-btn"
+                :disabled="logoutLoading || withdrawLoading || deleteDeviceLoading"
+                aria-label="이 디바이스 삭제"
+                @click="openDeleteDeviceDialog(getToken(t))"
+              >
+                <svg class="token-remove-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                class="device-toggle-btn"
+                :class="{ on: getEnabled(t) !== false }"
+                :disabled="logoutLoading || deleteDeviceLoading"
+                @click="toggleDevicePush(getToken(t), !(getEnabled(t) !== false))"
+              >
                 {{ getEnabled(t) !== false ? "알림 ON" : "알림 OFF" }}
               </button>
               <span class="token-index">{{ idx + 1 }}</span>
@@ -51,8 +68,8 @@
           </div>
         </div>
 
-        <button type="button" class="logout-btn" :disabled="logoutLoading || withdrawLoading" @click="handleLogout">로그아웃</button>
-        <button type="button" class="withdraw-link" :disabled="withdrawLoading" @click="openWithdrawDialog">회원탈퇴</button>
+        <button type="button" class="logout-btn" :disabled="logoutLoading || withdrawLoading || deleteDeviceLoading" @click="handleLogout">로그아웃</button>
+        <button type="button" class="withdraw-link" :disabled="withdrawLoading || deleteDeviceLoading" @click="openWithdrawDialog">회원탈퇴</button>
       </div>
 
       <div v-else-if="isLoggedIn === false" class="content">
@@ -74,6 +91,16 @@
       @confirm="confirmWithdraw"
       @cancel="closeWithdrawDialog"
     />
+
+    <ConfirmDialog
+      :visible="isDeleteDeviceDialogOpen"
+      title="디바이스 삭제"
+      message="이 디바이스를 목록에서 삭제할까요?"
+      confirm-text="삭제"
+      cancel-text="취소"
+      @confirm="confirmDeleteDevice"
+      @cancel="closeDeleteDeviceDialog"
+    />
   </main>
 </template>
 
@@ -94,6 +121,9 @@ const userName = ref("");
 const logoutLoading = ref(false);
 const withdrawLoading = ref(false);
 const isWithdrawDialogOpen = ref(false);
+const isDeleteDeviceDialogOpen = ref(false);
+const deleteTargetToken = ref("");
+const deleteDeviceLoading = ref(false);
 const fcmTokenEntries = ref<any[]>([]);
 const currentToken = ref("");
 
@@ -144,6 +174,53 @@ const getScreenText = (item: any): string => {
   if (typeof m.innerWidth === "number" && typeof m.innerHeight === "number") return `${m.innerWidth}x${m.innerHeight}`;
   if (typeof m.screenWidth === "number" && typeof m.screenHeight === "number") return `${m.screenWidth}x${m.screenHeight}`;
   return "";
+};
+
+const openDeleteDeviceDialog = (token: string) => {
+  if (!token) return;
+  deleteTargetToken.value = token;
+  isDeleteDeviceDialogOpen.value = true;
+};
+
+const closeDeleteDeviceDialog = () => {
+  isDeleteDeviceDialogOpen.value = false;
+  deleteTargetToken.value = "";
+};
+
+const confirmDeleteDevice = async () => {
+  const token = deleteTargetToken.value.trim();
+  closeDeleteDeviceDialog();
+  if (!token) return;
+
+  const currentUser = $auth.currentUser;
+  if (!currentUser) return;
+
+  const uid = currentUser.uid;
+  const wasCurrentDevice = currentToken.value === token;
+  deleteDeviceLoading.value = true;
+  try {
+    const refDoc = doc($db, "users", uid);
+    const snap = await getDoc(refDoc);
+    if (!snap.exists()) return;
+
+    const data: any = snap.data() || {};
+    const currentTokens = Array.isArray(data?.fcmTokens) ? data.fcmTokens : [];
+    const next = currentTokens.filter((item: any) => getToken(item) !== token);
+
+    await updateDoc(refDoc, { fcmTokens: next });
+    fcmTokenEntries.value = next;
+
+    if (wasCurrentDevice) {
+      localStorage.removeItem("fcmToken");
+      currentToken.value = "";
+      await signOut($auth);
+      router.push("/");
+    }
+  } catch {
+    alert("디바이스 삭제에 실패했습니다.");
+  } finally {
+    deleteDeviceLoading.value = false;
+  }
 };
 
 const toggleDevicePush = async (token: string, enabled: boolean) => {
@@ -453,7 +530,7 @@ onMounted(() => {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 10px 12px 10px 40px;
   border-radius: 16px;
   background: #ffffffcc;
   border: 1px solid #d8e7f3;
@@ -489,28 +566,42 @@ onMounted(() => {
   color: #b91c1c;
 }
 
-.token-item.current .device-toggle-btn {
-  padding: 3px 5px;
-  font-size: 13px;
-  min-width: 84px;
+/* 배지는 우측 상단 유지 — X는 좌측 상단에 두어 겹침 방지 */
+.token-remove-btn {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: auto;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #8a96a3;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
-.token-item.current .device-toggle-btn.on {
-  background: linear-gradient(135deg, #2c83c9 0%, #17446d 100%);
-  color: white;
-  box-shadow: 0 6px 18px rgba(44, 131, 201, 0.35);
-}
-
-.token-item.current .device-toggle-btn:not(.on) {
-  background: #fff1f1;
+.token-remove-btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.06);
   color: #b91c1c;
-  border: 1px solid rgba(185, 28, 28, 0.35);
-  box-shadow: 0 6px 18px rgba(185, 28, 28, 0.12);
 }
 
-.token-item.current .token-badge {
-  background: #17446d;
-  color: white;
+.token-remove-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.token-remove-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .token-main {
@@ -537,6 +628,8 @@ onMounted(() => {
   top: 10px;
   right: 10px;
   flex: none;
+  background: #17446d;
+  color: white;
 }
 
 .token-index {
