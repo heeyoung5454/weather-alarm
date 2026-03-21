@@ -103,7 +103,7 @@ import InfoTooltip from "../components/InfoTooltip.vue";
 import HourlyWeatherSection from "../components/HourlyWeatherSection.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 
-import { ref, onMounted } from "vue";
+import { ref, onMounted, watch } from "vue";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 
@@ -149,9 +149,32 @@ const handleLocationError = (error: string) => {
 // @ts-ignore - Nuxt auto-import
 const router = useRouter();
 // @ts-ignore - Nuxt auto-import
+const route = useRoute();
+// @ts-ignore - Nuxt auto-import
 const { $auth, $db } = useNuxtApp();
 
 const { getCurrentLocation } = useLocation();
+
+const WITHDRAW_TOAST_MSG = "탈퇴되었습니다. 서비스를 이용해주셔서 감사합니다";
+
+const showWithdrawSuccessToastIfNeeded = () => {
+  if (typeof window === "undefined") return;
+  if (sessionStorage.getItem("showWithdrawSuccessToast") !== "1") return;
+  sessionStorage.removeItem("showWithdrawSuccessToast");
+  toastMessage.value = WITHDRAW_TOAST_MSG;
+  toastVisible.value = true;
+  setTimeout(() => {
+    toastVisible.value = false;
+  }, 4000);
+};
+
+watch(
+  () => route.fullPath,
+  () => {
+    showWithdrawSuccessToastIfNeeded();
+  },
+  { immediate: true }
+);
 
 const syncFcmTokenOnLogin = async (user: any) => {
   const uid = user?.uid;

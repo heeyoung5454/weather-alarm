@@ -51,7 +51,8 @@
           </div>
         </div>
 
-        <button type="button" class="logout-btn" :disabled="logoutLoading" @click="handleLogout">로그아웃</button>
+        <button type="button" class="logout-btn" :disabled="logoutLoading || withdrawLoading" @click="handleLogout">로그아웃</button>
+        <button type="button" class="withdraw-link" :disabled="withdrawLoading" @click="openWithdrawDialog">회원탈퇴</button>
       </div>
 
       <div v-else-if="isLoggedIn === false" class="content">
@@ -63,13 +64,24 @@
         <p class="hint">계정 정보를 불러오는 중...</p>
       </div>
     </div>
+
+    <ConfirmDialog
+      :visible="isWithdrawDialogOpen"
+      title="회원탈퇴"
+      message="정말로 탈퇴하시겠습니까?"
+      confirm-text="예"
+      cancel-text="아니오"
+      @confirm="confirmWithdraw"
+      @cancel="closeWithdrawDialog"
+    />
   </main>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, onMounted } from "vue";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import { collection, deleteDoc, doc, getDoc, getDocs, query, updateDoc, where } from "firebase/firestore";
+import { deleteUser, onAuthStateChanged, signOut } from "firebase/auth";
+import ConfirmDialog from "../../components/ConfirmDialog.vue";
 
 // @ts-ignore - Nuxt auto-import
 const router = useRouter();
@@ -80,6 +92,8 @@ const isLoggedIn = ref<boolean | null>(null);
 const userEmail = ref("");
 const userName = ref("");
 const logoutLoading = ref(false);
+const withdrawLoading = ref(false);
+const isWithdrawDialogOpen = ref(false);
 type DeviceMeta = {
   // new schema
   userAgent?: string;
@@ -213,6 +227,52 @@ const toggleDevicePush = async (token: string, enabled: boolean) => {
   } finally {
     logoutLoading.value = false;
   }
+};
+
+const openWithdrawDialog = () => {
+  isWithdrawDialogOpen.value = true;
+};
+
+const closeWithdrawDialog = () => {
+  isWithdrawDialogOpen.value = false;
+};
+
+const confirmWithdraw = async () => {
+  const currentUser = $auth.currentUser;
+  if (!currentUser) {
+    closeWithdrawDialog();
+    return;
+  }
+
+  const uid = currentUser.uid;
+  withdrawLoading.value = true;
+  let firestoreOk = false;
+  try {
+    const q = query(collection($db, "alarms"), where("uid", "==", uid));
+    const alarmSnap = await getDocs(q);
+    await Promise.all(alarmSnap.docs.map((d) => deleteDoc(d.ref)));
+    await deleteDoc(doc($db, "users", uid));
+    firestoreOk = true;
+  } catch {
+    alert("회원탈퇴 처리 중 오류가 발생했습니다.");
+  } finally {
+    withdrawLoading.value = false;
+    closeWithdrawDialog();
+  }
+
+  if (!firestoreOk) return;
+
+  try {
+    await deleteUser(currentUser);
+  } catch {
+    await signOut($auth);
+  }
+
+  localStorage.removeItem("fcmToken");
+  if (typeof window !== "undefined") {
+    sessionStorage.setItem("showWithdrawSuccessToast", "1");
+  }
+  router.push("/");
 };
 
 const handleLogout = async () => {
@@ -394,6 +454,29 @@ onMounted(() => {
 
 .logout-btn:disabled {
   opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.withdraw-link {
+  align-self: flex-end;
+  margin-top: 10px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 13px;
+  font-weight: 700;
+  color: #8a96a3;
+  text-decoration: underline;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.withdraw-link:hover:not(:disabled) {
+  color: #b91c1c;
+}
+
+.withdraw-link:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
