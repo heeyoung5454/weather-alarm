@@ -102,22 +102,21 @@ export const cacheUserWeather = onSchedule(
             const isPushEnabled = data.isPush === true;
 
             // users.fcmTokens 배열 (enabled인 항목만)
-            const tokensFromArray: string[] = Array.isArray(data.fcmTokens)
-              ? data.fcmTokens
+            const tokensFromArray: string[] = Array.isArray(data.fcmTokens) ?
+              data.fcmTokens
                   .flatMap((t: unknown) => {
                     if (typeof t === "string") return t.trim().length > 0 ? [t] : [];
                     if (t && typeof t === "object" && "token" in t) {
-                      // @ts-ignore
-                      const token = typeof t.token === "string" ? t.token.trim() : "";
+                      const obj = t as { token?: unknown; enabled?: unknown };
+                      const token = typeof obj.token === "string" ? obj.token.trim() : "";
                       // enabled 값이 없으면 true로 취급
-                      // @ts-ignore
-                      const enabled = typeof t.enabled === "boolean" ? t.enabled : true;
+                      const enabled = typeof obj.enabled === "boolean" ? obj.enabled : true;
                       return token.length > 0 && enabled ? [token] : [];
                     }
                     return [];
                   })
-                  .filter((t: unknown) => typeof t === "string" && t.trim().length > 0)
-              : [];
+                  .filter((t: unknown) => typeof t === "string" && t.trim().length > 0) :
+              [];
             const tokens = Array.from(new Set(tokensFromArray));
 
             if (forecast.rain > 0 && tokens.length > 0 && isPushEnabled) {

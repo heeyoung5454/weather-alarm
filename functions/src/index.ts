@@ -54,21 +54,20 @@ export const alarmPush = onSchedule(
     userDocs.forEach((snap, idx) => {
       const uid = uids[idx];
       const data = snap.data() || {};
-      const tokensFromArray: string[] = Array.isArray(data.fcmTokens)
-        ? data.fcmTokens
+      const tokensFromArray: string[] = Array.isArray(data.fcmTokens) ?
+        data.fcmTokens
             .flatMap((t: unknown) => {
               if (typeof t === "string") return t.trim().length > 0 ? [t] : [];
               if (t && typeof t === "object" && "token" in t) {
-                // @ts-ignore
-                const token = typeof t.token === "string" ? t.token.trim() : "";
-                // @ts-ignore
-                const enabled = typeof t.enabled === "boolean" ? t.enabled : true;
+                const obj = t as { token?: unknown; enabled?: unknown };
+                const token = typeof obj.token === "string" ? obj.token.trim() : "";
+                const enabled = typeof obj.enabled === "boolean" ? obj.enabled : true;
                 return token.length > 0 && enabled ? [token] : [];
               }
               return [];
             })
-            .filter((t: unknown) => typeof t === "string" && t.trim().length > 0)
-        : [];
+            .filter((t: unknown) => typeof t === "string" && t.trim().length > 0) :
+        [];
       const tokens = Array.from(new Set(tokensFromArray));
       uidToTokens.set(uid, tokens);
     });
