@@ -1,31 +1,17 @@
 <template>
   <main class="page">
     <div class="page-content">
-   
-
       <!-- 상단 영역 -->
       <div class="header-section">
-        <button
-          v-if="isLoggedIn === true"
-          type="button"
-          class="header-logout-btn"
-          @click="goToAccount"
-          aria-label="My"
-        >
+        <button v-if="isLoggedIn === true" type="button" class="header-logout-btn" @click="goToAccount" aria-label="My">
           <span class="alarm-icon">👤</span>
           <span class="alarm-label">My</span>
         </button>
-        <button
-          v-else-if="isLoggedIn === false"
-          type="button"
-          class="header-login-btn"
-          :disabled="loginLoading || isConsentModalOpen"
-          @click="openConsentModal"
-        >
+        <button v-else-if="isLoggedIn === false" type="button" class="header-login-btn" :disabled="loginLoading || isConsentModalOpen" @click="openConsentModal">
           <span class="alarm-icon">🔑</span>
           <span class="alarm-label">구글 로그인</span>
         </button>
-        
+
         <NuxtLink to="/weather/nationalWeather" class="national-weather-link">
           <span class="link-text">전국날씨</span>
           <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -50,18 +36,19 @@
       </div>
 
       <div v-if="hasAirKoreaKey" class="air-quality-card">
-        <p class="air-quality-head">{{ airSummary?.sido ?? "—" }} · 대기질</p>
+        <p class="air-quality-head">{{ airSummary?.sido ?? "—" }}</p>
         <div v-if="airLoading" class="air-quality-loading">불러오는 중…</div>
         <template v-else-if="airSummary && !airError">
+          <p v-if="airSummary.pm10 == null && airSummary.pm25 == null" class="air-empty-hint">측정값이 없거나 아직 갱신되지 않았습니다.</p>
           <div class="air-quality-metrics">
             <div class="air-metric">
-              <span class="air-label">미세먼지 PM10</span>
+              <span class="air-label">미세먼지</span>
               <strong class="air-value">{{ airSummary.pm10 != null ? `${airSummary.pm10}` : "—" }}</strong>
               <span class="air-unit">㎍/㎥</span>
               <span v-if="airSummary.gradePm10" class="air-grade" :class="gradeClass(airSummary.pm10, 'pm10')">{{ airSummary.gradePm10 }}</span>
             </div>
             <div class="air-metric">
-              <span class="air-label">초미세 PM2.5</span>
+              <span class="air-label">초미세먼지</span>
               <strong class="air-value">{{ airSummary.pm25 != null ? `${airSummary.pm25}` : "—" }}</strong>
               <span class="air-unit">㎍/㎥</span>
               <span v-if="airSummary.gradePm25" class="air-grade" :class="gradeClass(airSummary.pm25, 'pm25')">{{ airSummary.gradePm25 }}</span>
@@ -77,13 +64,7 @@
             <span class="push-toggle-label">강수 알림</span>
             <InfoTooltip text="3시간뒤 비 예보 알림" label="강수 알림 안내" />
           </div>
-          <button
-            type="button"
-            class="push-toggle-btn"
-            :class="{ on: isPushEnabled }"
-            :disabled="pushToggleLoading || isLoggedIn !== true"
-            @click="togglePushSetting"
-          >
+          <button type="button" class="push-toggle-btn" :class="{ on: isPushEnabled }" :disabled="pushToggleLoading || isLoggedIn !== true" @click="togglePushSetting">
             <span class="toggle-thumb"></span>
           </button>
         </div>
@@ -101,18 +82,8 @@
       </button>
 
       <ToastMessage :message="toastMessage" :visible="toastVisible" />
-     
 
-      <ConfirmDialog
-        :visible="isConsentModalOpen"
-        title="동의 안내"
-        :message="consentMessage"
-        confirm-text="동의"
-        cancel-text="취소"
-        @confirm="confirmConsentAndLogin"
-        @cancel="closeConsentModal"
-      />
-    
+      <ConfirmDialog :visible="isConsentModalOpen" title="동의 안내" :message="consentMessage" confirm-text="동의" cancel-text="취소" @confirm="confirmConsentAndLogin" @cancel="closeConsentModal" />
     </div>
   </main>
 </template>
@@ -230,7 +201,7 @@ watch(
   () => {
     loadAirQuality();
   },
-  { deep: true },
+  { deep: true }
 );
 
 const WITHDRAW_TOAST_MSG = "탈퇴되었습니다. 서비스를 이용해주셔서 감사합니다";
@@ -274,11 +245,7 @@ const syncFcmTokenOnLogin = async (user: any) => {
   localStorage.setItem("fcmToken", token);
 
   // users 문서에 이미 저장된 위치가 있으면 함께 저장
-  const canUseCoords =
-    typeof position.value?.lat === "number" &&
-    typeof position.value?.lng === "number" &&
-    position.value.lat !== 0 &&
-    position.value.lng !== 0;
+  const canUseCoords = typeof position.value?.lat === "number" && typeof position.value?.lng === "number" && position.value.lat !== 0 && position.value.lng !== 0;
 
   if (canUseCoords) {
     await saveUser(user, token, { lat: position.value.lat, lng: position.value.lng });
@@ -594,7 +561,10 @@ const startAlarm = async () => {
   font-weight: 800;
   box-shadow: 0 4px 14px rgba(44, 131, 201, 0.35);
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s,
+    opacity 0.2s;
 }
 
 .google-login-btn:disabled {
@@ -732,6 +702,13 @@ const startAlarm = async () => {
   margin: 0;
   font-size: 13px;
   color: #c45c5c;
+}
+
+.air-empty-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #6b8399;
 }
 
 .push-toggle-wrap {

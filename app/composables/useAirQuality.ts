@@ -13,18 +13,36 @@ function normalizeServiceKey(serviceKey: string) {
   return normalizedKey;
 }
 
+/**
+ * 에어코리아 응답값에 따른 변환
+ * - `items: [ { item: [ {...측정소}, ... ] } ]` 이거나
+ * - `items: [ {...측정소}, ... ]` 처럼 측정소 객체 배열
+ */
 function normalizeItems(body: { items?: unknown }): Record<string, unknown>[] {
   const raw = body?.items;
-  if (raw == null) return [];
-  let item: unknown;
-  if (Array.isArray(raw)) {
-    const first = raw[0] as { item?: unknown } | undefined;
-    item = first?.item;
-  } else {
-    item = (raw as { item?: unknown }).item;
+  if (raw == null || raw === "") return [];
+
+  if (!Array.isArray(raw)) {
+    const obj = raw as { item?: unknown };
+    if (Array.isArray(obj.item)) return obj.item as Record<string, unknown>[];
+    if (obj.item != null && typeof obj.item === "object") return [obj.item as Record<string, unknown>];
+    return [];
   }
-  if (item == null) return [];
-  return Array.isArray(item) ? item : [item];
+
+  if (raw.length === 0) return [];
+  const first = raw[0] as Record<string, unknown>;
+
+  if ("item" in first) {
+    const item = first.item;
+    if (item == null) return [];
+    return Array.isArray(item) ? (item as Record<string, unknown>[]) : [item as Record<string, unknown>];
+  }
+
+  if ("stationName" in first || "pm10Value" in first || "pm25Value" in first || "dataTime" in first) {
+    return raw as Record<string, unknown>[];
+  }
+
+  return [];
 }
 
 function parsePmValue(v: unknown): number | null {
@@ -113,12 +131,14 @@ export async function fetchAirQualityByCoords(lat: number, lng: number): Promise
   });
 
   const header = res?.response?.header;
-  if (header?.resultCode && header.resultCode !== "00") {
-    console.warn("에어코리아 API:", header.resultMsg || header.resultCode);
+  const resultCode = header?.resultCode != null ? String(header.resultCode).trim() : "";
+  if (resultCode && resultCode !== "00") {
+    console.warn("에어코리아 API:", header.resultMsg || resultCode);
     return null;
   }
 
-  const items = normalizeItems(res?.response?.body ?? {});
+  const body = res?.response?.body;
+  const items = normalizeItems(body ?? {});
   const { pm10Avg, pm25Avg, stationCount } = aggregatePm(items);
 
   return {
