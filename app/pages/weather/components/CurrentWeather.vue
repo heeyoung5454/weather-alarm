@@ -14,7 +14,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref, watch, computed } from "vue";
-import { getRegionName } from "../../../utils/reverseGeo";
+import { formatKoreanAddressLine, getRegionName } from "../../../utils/reverseGeo";
 import { getUltraSrtNcst, getUltraSrtFcst } from "../../../composables/useWeather";
 import { getBaseDateTime, getFcstBaseTime } from "../../../utils/timeConvert";
 import WeatherSummaryCard from "../../../components/WeatherSummaryCard.vue";
@@ -71,9 +71,8 @@ const applyCoords = async (lat: number, lng: number) => {
 
   try {
     const region = await getRegionName(lat, lng);
-    if (region?.address) {
-      locationText.value = `${region.address.city ?? ""} ${region.address.borough ?? ""} ${region.address.suburb ?? ""}`.trim();
-    }
+    const line = formatKoreanAddressLine(region);
+    if (line) locationText.value = line;
   } catch {
     // 주소 변환 실패 시 기존 텍스트 유지
   }

@@ -19,3 +19,13 @@ export const getRegionName = async (lat: number, lng: number) => {
 
   return res;
 };
+
+/**
+ * 루트 페이지 CurrentWeather의 location-text와 동일: city + borough + suburb (Nominatim 원문).
+ * @param res getRegionName() 결과
+ */
+export const formatKoreanAddressLine = (res: any): string => {
+  const a = res?.address;
+  if (!a || typeof a !== "object") return "";
+  return `${a.city ?? ""} ${a.borough ?? ""} ${a.suburb ?? ""}`.trim().replace(/\s+/g, " ");
+};

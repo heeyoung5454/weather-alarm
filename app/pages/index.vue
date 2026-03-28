@@ -138,10 +138,6 @@ const consentMessage = `알림 서비스를 이용하기 위해 로그인이 필
 
 수집된 정보는 알림 제공 및 서비스 운영에만 사용됩니다.`;
 
-const handlePositionUpdate = (lat: number, lng: number) => {
-  position.value = { lat, lng };
-};
-
 const handleLocationError = (error: string) => {
   locationError.value = error;
 };
@@ -152,6 +148,20 @@ const router = useRouter();
 const route = useRoute();
 // @ts-ignore - Nuxt auto-import
 const { $auth, $db } = useNuxtApp();
+
+const handlePositionUpdate = async (lat: number, lng: number) => {
+  position.value = { lat, lng };
+  const user = $auth.currentUser;
+  if (!user) return;
+  if (typeof lat !== "number" || typeof lng !== "number") return;
+  if (lat === 0 && lng === 0) return;
+  try {
+    const token = localStorage.getItem("fcmToken") || "";
+    await saveUser(user, token, { lat, lng });
+  } catch (e) {
+    console.error("위치·userRegions 저장 실패:", e);
+  }
+};
 
 const { getCurrentLocation } = useLocation();
 

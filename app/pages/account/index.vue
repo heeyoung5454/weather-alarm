@@ -20,6 +20,30 @@
           <span class="value">{{ userName }}</span>
         </p>
 
+        <div class="regions-section">
+          <p class="section-title">등록 지역</p>
+          <p class="hint" v-if="userRegions.length === 0">저장된 지역이 없습니다. 홈에서 위치를 허용하면 저장됩니다.</p>
+          <ul v-else class="regions-list">
+            <li v-for="r in sortedUserRegions" :key="regionEntryKey(r)" class="region-item">
+              <span class="region-address">{{ regionDisplayLine(r) }}</span>
+              <div class="region-actions">
+                <span class="region-saved">{{ formatRegionSavedAt(r.savedAt) }}</span>
+                <button
+                  type="button"
+                  class="region-remove-btn"
+                  :disabled="logoutLoading || withdrawLoading || deleteDeviceLoading || deleteRegionLoading"
+                  aria-label="이 지역 삭제"
+                  @click="openDeleteRegionDialog(r)"
+                >
+                  <svg class="region-remove-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                  </svg>
+                </button>
+              </div>
+            </li>
+          </ul>
+        </div>
+
         <div class="tokens-section">
           <p class="section-title">등록 디바이스</p>
           <p class="hint" v-if="fcmTokenEntries.length === 0">등록된 디바이스가 없습니다.</p>
@@ -30,7 +54,7 @@
               <button
                 type="button"
                 class="token-remove-btn"
-                :disabled="logoutLoading || withdrawLoading || deleteDeviceLoading"
+                :disabled="logoutLoading || withdrawLoading || deleteDeviceLoading || deleteRegionLoading"
                 aria-label="이 디바이스 삭제"
                 @click="openDeleteDeviceDialog(getToken(t))"
               >
@@ -42,7 +66,7 @@
                 type="button"
                 class="device-toggle-btn"
                 :class="{ on: getEnabled(t) !== false }"
-                :disabled="logoutLoading || deleteDeviceLoading"
+                :disabled="logoutLoading || deleteDeviceLoading || deleteRegionLoading"
                 @click="toggleDevicePush(getToken(t), !(getEnabled(t) !== false))"
               >
                 {{ getEnabled(t) !== false ? "알림 ON" : "알림 OFF" }}
@@ -68,8 +92,8 @@
           </div>
         </div>
 
-        <button type="button" class="logout-btn" :disabled="logoutLoading || withdrawLoading || deleteDeviceLoading" @click="handleLogout">로그아웃</button>
-        <button type="button" class="withdraw-link" :disabled="withdrawLoading || deleteDeviceLoading" @click="openWithdrawDialog">회원탈퇴</button>
+        <button type="button" class="logout-btn" :disabled="logoutLoading || withdrawLoading || deleteDeviceLoading || deleteRegionLoading" @click="handleLogout">로그아웃</button>
+        <button type="button" class="withdraw-link" :disabled="withdrawLoading || deleteDeviceLoading || deleteRegionLoading" @click="openWithdrawDialog">회원탈퇴</button>
       </div>
 
       <div v-else-if="isLoggedIn === false" class="content">
@@ -101,6 +125,16 @@
       @confirm="confirmDeleteDevice"
       @cancel="closeDeleteDeviceDialog"
     />
+
+    <ConfirmDialog
+      :visible="isDeleteRegionDialogOpen"
+      title="등록 지역"
+      message="지역을 해제하시겠습니까?"
+      confirm-text="예"
+      cancel-text="아니오"
+      @confirm="confirmDeleteRegion"
+      @cancel="closeDeleteRegionDialog"
+    />
   </main>
 </template>
 
@@ -109,6 +143,7 @@ import { computed, ref, onMounted } from "vue";
 import { collection, deleteDoc, doc, getDoc, getDocs, query, updateDoc, where } from "firebase/firestore";
 import { deleteUser, onAuthStateChanged, signOut } from "firebase/auth";
 import ConfirmDialog from "../../components/ConfirmDialog.vue";
+import { formatKoreanAddressLine, getRegionName } from "../../utils/reverseGeo";
 
 // @ts-ignore - Nuxt auto-import
 const router = useRouter();
@@ -124,8 +159,63 @@ const isWithdrawDialogOpen = ref(false);
 const isDeleteDeviceDialogOpen = ref(false);
 const deleteTargetToken = ref("");
 const deleteDeviceLoading = ref(false);
+const isDeleteRegionDialogOpen = ref(false);
+const deleteTargetRegion = ref<any>(null);
+const deleteRegionLoading = ref(false);
 const fcmTokenEntries = ref<any[]>([]);
+const userRegions = ref<any[]>([]);
+const regionLabelByKey = ref<Record<string, string>>({});
+const regionAddressLoading = ref(false);
 const currentToken = ref("");
+
+const regionCoordKey = (r: any): string => {
+  if (typeof r?.lat !== "number" || typeof r?.lng !== "number") return "";
+  return `${r.lat.toFixed(5)},${r.lng.toFixed(5)}`;
+};
+
+const fetchRegionLabels = async (list: any[]) => {
+  const next: Record<string, string> = {};
+  const needFetch: any[] = [];
+  for (const r of list) {
+    const k = regionCoordKey(r);
+    if (!k) continue;
+    if (typeof r.label === "string" && r.label.trim()) {
+      next[k] = r.label.trim();
+    } else {
+      needFetch.push(r);
+    }
+  }
+  regionLabelByKey.value = next;
+  if (!needFetch.length) return;
+
+  regionAddressLoading.value = true;
+  try {
+    for (const r of needFetch) {
+      const k = regionCoordKey(r);
+      if (!k) continue;
+      try {
+        const res = await getRegionName(r.lat, r.lng);
+        const text = formatKoreanAddressLine(res);
+        next[k] = text.trim() || formatLatLng(r.lat, r.lng);
+      } catch {
+        next[k] = formatLatLng(r.lat, r.lng);
+      }
+    }
+    regionLabelByKey.value = { ...next };
+  } finally {
+    regionAddressLoading.value = false;
+  }
+};
+
+const regionDisplayLine = (r: any) => {
+  if (typeof r?.label === "string" && r.label.trim()) return r.label.trim();
+  const k = regionCoordKey(r);
+  if (!k) return "-";
+  const cached = regionLabelByKey.value[k];
+  if (cached !== undefined) return cached;
+  if (regionAddressLoading.value) return "주소 불러오는 중…";
+  return formatLatLng(r.lat, r.lng);
+};
 
 const displayedTokenEntries = computed(() => {
   const list = Array.isArray(fcmTokenEntries.value) ? fcmTokenEntries.value : [];
@@ -134,6 +224,39 @@ const displayedTokenEntries = computed(() => {
   const rest = list.filter((t: any) => getToken(t) !== currentToken.value);
   return [...current, ...rest];
 });
+
+const regionSavedMs = (v: any): number => {
+  if (v == null) return 0;
+  if (typeof v.toDate === "function") return v.toDate().getTime();
+  if (typeof v.seconds === "number") return v.seconds * 1000;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+};
+
+const regionEntryKey = (r: any): string => {
+  const k = regionCoordKey(r);
+  return `${k}|${regionSavedMs(r?.savedAt)}`;
+};
+
+const sortedUserRegions = computed(() => {
+  const list = [...(userRegions.value ?? [])];
+  return list.sort((a, b) => regionSavedMs(b?.savedAt) - regionSavedMs(a?.savedAt));
+});
+
+const formatLatLng = (lat: unknown, lng: unknown) => {
+  if (typeof lat !== "number" || typeof lng !== "number") return "-";
+  return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+};
+
+const formatRegionSavedAt = (v: any) => {
+  if (v == null) return "-";
+  let d: Date;
+  if (typeof v.toDate === "function") d = v.toDate();
+  else if (typeof v.seconds === "number") d = new Date(v.seconds * 1000);
+  else d = new Date(v);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleString("ko-KR");
+};
 
 const maskToken = (token: string) => {
   const t = token.trim();
@@ -174,6 +297,48 @@ const getScreenText = (item: any): string => {
   if (typeof m.innerWidth === "number" && typeof m.innerHeight === "number") return `${m.innerWidth}x${m.innerHeight}`;
   if (typeof m.screenWidth === "number" && typeof m.screenHeight === "number") return `${m.screenWidth}x${m.screenHeight}`;
   return "";
+};
+
+const openDeleteRegionDialog = (r: any) => {
+  if (!r) return;
+  deleteTargetRegion.value = r;
+  isDeleteRegionDialogOpen.value = true;
+};
+
+const closeDeleteRegionDialog = () => {
+  isDeleteRegionDialogOpen.value = false;
+  deleteTargetRegion.value = null;
+};
+
+const confirmDeleteRegion = async () => {
+  const target = deleteTargetRegion.value;
+  closeDeleteRegionDialog();
+  if (!target) return;
+
+  const currentUser = $auth.currentUser;
+  if (!currentUser) return;
+
+  const uid = currentUser.uid;
+  const dropKey = regionEntryKey(target);
+  deleteRegionLoading.value = true;
+  try {
+    const next = userRegions.value.filter((e) => regionEntryKey(e) !== dropKey);
+    await updateDoc(doc($db, "userRegions", uid), {
+      regions: next,
+      updatedAt: new Date(),
+    });
+    userRegions.value = next;
+
+    const ck = regionCoordKey(target);
+    if (ck && !next.some((e) => regionCoordKey(e) === ck)) {
+      const { [ck]: _removed, ...rest } = regionLabelByKey.value;
+      regionLabelByKey.value = rest;
+    }
+  } catch {
+    alert("지역 삭제에 실패했습니다.");
+  } finally {
+    deleteRegionLoading.value = false;
+  }
 };
 
 const openDeleteDeviceDialog = (token: string) => {
@@ -277,6 +442,7 @@ const confirmWithdraw = async () => {
     const q = query(collection($db, "alarms"), where("uid", "==", uid));
     const alarmSnap = await getDocs(q);
     await Promise.all(alarmSnap.docs.map((d) => deleteDoc(d.ref)));
+    await deleteDoc(doc($db, "userRegions", uid));
     await deleteDoc(doc($db, "users", uid));
     firestoreOk = true;
   } catch {
@@ -327,6 +493,9 @@ onMounted(() => {
       userEmail.value = "";
       userName.value = "";
       fcmTokenEntries.value = [];
+      userRegions.value = [];
+      regionLabelByKey.value = {};
+      regionAddressLoading.value = false;
       currentToken.value = "";
       return;
     }
@@ -354,6 +523,20 @@ onMounted(() => {
       userName.value = user.displayName ?? "";
       fcmTokenEntries.value = [];
     }
+
+    try {
+      const regSnap = await getDoc(doc($db, "userRegions", user.uid));
+      if (regSnap.exists()) {
+        const rdata: any = regSnap.data();
+        userRegions.value = Array.isArray(rdata?.regions) ? rdata.regions : [];
+      } else {
+        userRegions.value = [];
+      }
+    } catch {
+      userRegions.value = [];
+    }
+
+    await fetchRegionLabels(userRegions.value);
   });
 });
 </script>
@@ -504,6 +687,86 @@ onMounted(() => {
 .withdraw-link:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.regions-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+
+.regions-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.region-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #ffffffcc;
+  border: 1px solid #d8e7f3;
+  font-size: 13px;
+}
+
+.region-address {
+  flex: 1;
+  min-width: 0;
+  font-weight: 800;
+  color: #17446d;
+  line-height: 1.45;
+  word-break: keep-all;
+}
+
+.region-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.region-saved {
+  font-size: 12px;
+  color: #6b8399;
+}
+
+.region-remove-btn {
+  flex: 0 0 auto;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #8a96a3;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.region-remove-btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.06);
+  color: #b91c1c;
+}
+
+.region-remove-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.region-remove-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .tokens-section {

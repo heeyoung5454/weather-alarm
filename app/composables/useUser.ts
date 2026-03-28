@@ -1,4 +1,5 @@
 import { deleteField, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { pushUserRegion } from "./useUserRegions";
 
 type Coords = { lat: number; lng: number };
 
@@ -160,5 +161,13 @@ export const saveUser = async (user: any, token: string, coords?: Coords) => {
     await updateDoc(ref, baseData);
 
     console.log("기존 사용자 토큰/위치 업데이트");
+  }
+
+  if (coords) {
+    try {
+      await pushUserRegion(user.uid, coords);
+    } catch (e) {
+      console.error("userRegions 저장 실패:", e);
+    }
   }
 };
