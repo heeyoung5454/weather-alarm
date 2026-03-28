@@ -7,6 +7,8 @@ export default defineNuxtConfig({
   runtimeConfig: {
     public: {
       weatherKey: process.env.WEATHER_API_KEY,
+      /** 한국환경공단 에어코리아 (시도별 실시간) — 공공데이터포털 활용신청 키 */
+      airKoreaKey: process.env.AIRKOREA_API_KEY,
     },
   },
 });

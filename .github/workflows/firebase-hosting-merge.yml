@@ -18,6 +18,7 @@ jobs:
         run: npm run generate
         env:
           WEATHER_API_KEY: ${{ secrets.WEATHER_API_KEY }}
+          AIRKOREA_API_KEY: ${{ secrets.AIRKOREA_API_KEY }}
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}

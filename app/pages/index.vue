@@ -49,6 +49,28 @@
         <p class="loading-text">날씨 정보를 불러오는 중...</p>
       </div>
 
+      <div v-if="hasAirKoreaKey" class="air-quality-card">
+        <p class="air-quality-head">{{ airSummary?.sido ?? "—" }} · 대기질</p>
+        <div v-if="airLoading" class="air-quality-loading">불러오는 중…</div>
+        <template v-else-if="airSummary && !airError">
+          <div class="air-quality-metrics">
+            <div class="air-metric">
+              <span class="air-label">미세먼지 PM10</span>
+              <strong class="air-value">{{ airSummary.pm10 != null ? `${airSummary.pm10}` : "—" }}</strong>
+              <span class="air-unit">㎍/㎥</span>
+              <span v-if="airSummary.gradePm10" class="air-grade" :class="gradeClass(airSummary.pm10, 'pm10')">{{ airSummary.gradePm10 }}</span>
+            </div>
+            <div class="air-metric">
+              <span class="air-label">초미세 PM2.5</span>
+              <strong class="air-value">{{ airSummary.pm25 != null ? `${airSummary.pm25}` : "—" }}</strong>
+              <span class="air-unit">㎍/㎥</span>
+              <span v-if="airSummary.gradePm25" class="air-grade" :class="gradeClass(airSummary.pm25, 'pm25')">{{ airSummary.gradePm25 }}</span>
+            </div>
+          </div>
+        </template>
+        <p v-else-if="airError" class="air-error">{{ airError }}</p>
+      </div>
+
       <div class="push-toggle-wrap">
         <div class="push-toggle-row">
           <div class="push-label-wrap">
@@ -103,7 +125,7 @@ import InfoTooltip from "../components/InfoTooltip.vue";
 import HourlyWeatherSection from "../components/HourlyWeatherSection.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 
-import { ref, onMounted, watch } from "vue";
+import { ref, onMounted, watch, computed } from "vue";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 
@@ -111,6 +133,7 @@ import { useGoogleLogin } from "../composables/useGoogleLogin";
 import { saveUser } from "../composables/useUser";
 import { usePush } from "../composables/usePush";
 import { useLocation } from "../composables/useLocation";
+import { fetchAirQualityByCoords, type AirQualitySummary } from "../composables/useAirQuality";
 
 const position = ref({
   lat: 0,
@@ -164,6 +187,51 @@ const handlePositionUpdate = async (lat: number, lng: number) => {
 };
 
 const { getCurrentLocation } = useLocation();
+
+// @ts-ignore - Nuxt auto-import
+const config = useRuntimeConfig();
+const hasAirKoreaKey = computed(() => !!String(config.public.airKoreaKey || "").trim());
+
+const airLoading = ref(false);
+const airError = ref("");
+const airSummary = ref<AirQualitySummary | null>(null);
+
+const gradeClass = (v: number | null, kind: "pm10" | "pm25") => {
+  if (v == null) return "";
+  const good = kind === "pm10" ? v <= 30 : v <= 15;
+  const mid = kind === "pm10" ? v <= 80 : v <= 35;
+  const bad = kind === "pm10" ? v <= 150 : v <= 75;
+  if (good) return "g-good";
+  if (mid) return "g-mid";
+  if (bad) return "g-bad";
+  return "g-verybad";
+};
+
+const loadAirQuality = async () => {
+  if (!hasAirKoreaKey.value) return;
+  const { lat, lng } = position.value;
+  if (typeof lat !== "number" || typeof lng !== "number" || (lat === 0 && lng === 0)) return;
+  airLoading.value = true;
+  airError.value = "";
+  try {
+    const r = await fetchAirQualityByCoords(lat, lng);
+    airSummary.value = r;
+    if (!r) airError.value = "대기질 정보를 불러오지 못했습니다.";
+  } catch {
+    airSummary.value = null;
+    airError.value = "대기질 정보를 불러오지 못했습니다.";
+  } finally {
+    airLoading.value = false;
+  }
+};
+
+watch(
+  position,
+  () => {
+    loadAirQuality();
+  },
+  { deep: true },
+);
 
 const WITHDRAW_TOAST_MSG = "탈퇴되었습니다. 서비스를 이용해주셔서 감사합니다";
 
@@ -574,6 +642,96 @@ const startAlarm = async () => {
   font-size: 14px;
   font-weight: 600;
   color: #4c6f8f;
+}
+
+.air-quality-card {
+  width: 100%;
+  padding: 16px 18px;
+  border-radius: 20px;
+  background: #ffffffd9;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 8px 22px rgba(29, 76, 122, 0.12);
+  box-sizing: border-box;
+}
+
+.air-quality-head {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #17446d;
+}
+
+.air-quality-loading {
+  margin: 0;
+  font-size: 13px;
+  color: #6b8399;
+}
+
+.air-quality-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.air-metric {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 10px;
+}
+
+.air-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #6b8399;
+  min-width: 110px;
+}
+
+.air-value {
+  font-size: 28px;
+  font-weight: 800;
+  color: #17446d;
+  letter-spacing: -0.02em;
+}
+
+.air-unit {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8aa3b8;
+}
+
+.air-grade {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.air-grade.g-good {
+  background: #d9f0ff;
+  color: #17446d;
+}
+
+.air-grade.g-mid {
+  background: #fff3d4;
+  color: #7a5a00;
+}
+
+.air-grade.g-bad {
+  background: #ffe4d4;
+  color: #a14a00;
+}
+
+.air-grade.g-verybad {
+  background: #ffd9e0;
+  color: #9aa3b8;
+}
+
+.air-error {
+  margin: 0;
+  font-size: 13px;
+  color: #c45c5c;
 }
 
 .push-toggle-wrap {
