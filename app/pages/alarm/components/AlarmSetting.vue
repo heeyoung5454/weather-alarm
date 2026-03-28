@@ -10,10 +10,9 @@
 
     <div class="alarm-list">
       <AlarmItem
-        v-for="(alarm, index) in alarms"
+        v-for="alarm in sortedAlarms"
         :key="alarm.id"
         :alarm="alarm"
-        :index="index"
         @remove="removeAlarm"
         @persist="persistAlarm"
       />
@@ -37,7 +36,7 @@ import { collection, updateDoc, deleteDoc, doc, query, where, getDocs } from "fi
 import ConfirmDialog from "../../../components/ConfirmDialog.vue";
 import AlarmItem from "./AlarmItem.vue";
 
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { onAuthStateChanged } from "firebase/auth";
 import { usePush } from "../../../composables/usePush";
 import { saveUser } from "../../../composables/useUser";
@@ -52,6 +51,19 @@ const { fetchRegions } = useRegions();
 
 const alarms = ref<any[]>([]);
 
+const timeToMinutes = (t: unknown): number => {
+  const [hs, ms] = String(t ?? "00:00").split(":");
+  const h = parseInt(hs, 10);
+  const m = parseInt(ms ?? "0", 10);
+  const hh = Number.isFinite(h) ? Math.max(0, Math.min(23, h)) : 0;
+  const mm = Number.isFinite(m) ? Math.max(0, Math.min(59, m)) : 0;
+  return hh * 60 + mm;
+};
+
+const sortedAlarms = computed(() =>
+  [...alarms.value].sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time)),
+);
+
 const ALL_WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 
 const normalizeWeekdays = (raw: unknown): number[] => {
@@ -62,7 +74,7 @@ const normalizeWeekdays = (raw: unknown): number[] => {
 };
 
 const isDeleteDialogOpen = ref(false);
-const deleteTargetIndex = ref<number | null>(null);
+const deleteTargetId = ref<string | null>(null);
 
 const goToAddAlarm = async () => {
   const user = $auth.currentUser;
@@ -78,21 +90,21 @@ const goToAddAlarm = async () => {
 };
 
 /* 알람 삭제 */
-const removeAlarm = async (index: number) => {
-  deleteTargetIndex.value = index;
+const removeAlarm = (id: string) => {
+  deleteTargetId.value = id;
   isDeleteDialogOpen.value = true;
 };
 
 const closeDeleteDialog = () => {
   isDeleteDialogOpen.value = false;
-  deleteTargetIndex.value = null;
+  deleteTargetId.value = null;
 };
 
 const confirmRemoveAlarm = async () => {
-  if (deleteTargetIndex.value === null) return;
-  const index = deleteTargetIndex.value;
-  await deleteDoc(doc($db, "alarms", alarms.value[index].id));
-  alarms.value.splice(index, 1);
+  const id = deleteTargetId.value;
+  if (!id) return;
+  await deleteDoc(doc($db, "alarms", id));
+  alarms.value = alarms.value.filter((a) => a.id !== id);
   closeDeleteDialog();
 };
 

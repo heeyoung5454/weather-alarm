@@ -32,7 +32,7 @@
     </div>
 
     <div class="alarm-footer">
-      <button class="delete-btn" type="button" @click="emit('remove', index)">삭제</button>
+      <button class="delete-btn" type="button" @click="emit('remove', alarm.id)">삭제</button>
     </div>
   </div>
 </template>
@@ -44,11 +44,10 @@ const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
 
 const props = defineProps<{
   alarm: any;
-  index: number;
 }>();
 
 const emit = defineEmits<{
-  remove: [index: number];
+  remove: [id: string];
   persist: [alarm: any];
 }>();
 
@@ -192,17 +191,15 @@ const isWeekdayOn = (alarm: any, day: number) => {
 .weekday-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 8px;
   margin-top: 4px;
 }
 
 .weekday-pill {
-  min-width: 28px;
-  padding: 4px 7px;
+  padding: 2px;
   font-size: 11px;
   font-weight: 700;
   color: #9aa8b5;
-  background: #e8eef4;
   text-align: center;
 }
 
