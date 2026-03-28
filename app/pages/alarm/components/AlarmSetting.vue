@@ -24,6 +24,21 @@
           </label>
         </div>
 
+        <div class="alarm-weekdays" role="group" aria-label="요일">
+          <div class="weekday-chips">
+            <button
+              v-for="day in ALL_WEEKDAYS"
+              :key="day"
+              type="button"
+              class="weekday-chip"
+              :class="{ active: isWeekdayOn(alarm, day) }"
+              @click="toggleWeekday(alarm, day)"
+            >
+              {{ WEEKDAY_LABELS[day] }}
+            </button>
+          </div>
+        </div>
+
         <div class="alarm-sub">
           <select v-model="alarm.region" @change="persistAlarm(alarm)">
             <option v-for="region in regionKeys" :key="region" :value="region">
@@ -84,7 +99,7 @@
 import { collection, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs } from "firebase/firestore";
 import ConfirmDialog from "../../../components/ConfirmDialog.vue";
 
-import { ref, onMounted } from "vue";
+import { ref, onMounted, computed } from "vue";
 import { onAuthStateChanged } from "firebase/auth";
 import { usePush } from "../../../composables/usePush";
 import { saveUser } from "../../../composables/useUser";
@@ -96,6 +111,36 @@ const { regions: regionDocs, fetchRegions } = useRegions();
 const regionKeys = computed<string[]>(() => (regionDocs.value ?? []).map((r: any) => r.name));
 
 const alarms = ref<any[]>([]);
+
+/** 0=일 … 6=토 (Date.getDay()와 동일, 스케줄러와 맞춤) */
+const ALL_WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
+const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
+
+const normalizeWeekdays = (raw: unknown): number[] => {
+  if (!Array.isArray(raw) || raw.length === 0) return [...ALL_WEEKDAYS];
+  const nums = raw.filter((x): x is number => typeof x === "number" && Number.isInteger(x) && x >= 0 && x <= 6);
+  if (nums.length === 0) return [...ALL_WEEKDAYS];
+  return Array.from(new Set(nums)).sort((a, b) => a - b);
+};
+
+const isWeekdayOn = (alarm: any, day: number) => {
+  const w = normalizeWeekdays(alarm.weekdays);
+  return w.includes(day);
+};
+
+const toggleWeekday = (alarm: any, day: number) => {
+  let w = normalizeWeekdays(alarm.weekdays);
+  const set = new Set(w);
+  if (set.has(day)) {
+    if (set.size <= 1) return;
+    set.delete(day);
+  } else {
+    set.add(day);
+  }
+  w = Array.from(set).sort((a, b) => a - b);
+  alarm.weekdays = w;
+  persistAlarm(alarm);
+};
 
 // 5분 단위 시간 선택용 상태
 const isTimePickerOpen = ref(false);
@@ -136,6 +181,7 @@ const defaultAlarm = () => ({
   time: "07:00",
   region: "서울",
   enabled: true,
+  weekdays: [...ALL_WEEKDAYS],
 });
 
 /* 알람 추가 */
@@ -156,6 +202,7 @@ const addAlarm = async () => {
     time: alarm.time,
     region: alarm.region,
     enabled: alarm.enabled,
+    weekdays: alarm.weekdays,
     createdAt: new Date(),
   });
 
@@ -211,6 +258,7 @@ const persistAlarm = async (alarm: any) => {
     time: alarm.time,
     region: alarm.region,
     enabled: alarm.enabled,
+    weekdays: normalizeWeekdays(alarm.weekdays),
   });
 };
 
@@ -220,11 +268,15 @@ const loadAlarms = async (uid: string) => {
 
   const snapshot = await getDocs(q);
 
-  alarms.value = snapshot.docs.map((d) => ({
-    id: d.id,
-    ...d.data(),
-    isNew: false,
-  }));
+  alarms.value = snapshot.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      ...data,
+      weekdays: normalizeWeekdays(data.weekdays),
+      isNew: false,
+    };
+  });
 };
 
 onMounted(() => {
@@ -297,6 +349,39 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.alarm-weekdays {
+  margin-top: 12px;
+}
+
+.weekday-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.weekday-chip {
+  min-width: 32px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  border: 1px solid #d8e7f3;
+  background: #f4f7fb;
+  color: #6b8399;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.weekday-chip.active {
+  background: #d9f0ff;
+  border-color: #2c83c9;
+  color: #17446d;
+}
+
+.weekday-chip:hover:not(.active) {
+  background: #edf2f6;
 }
 
 .time {

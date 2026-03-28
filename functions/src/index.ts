@@ -1,5 +1,6 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
+import { getSeoulWeekday0To6, normalizeAlarmWeekdays } from './utils/weekday';
 
 admin.initializeApp();
 
@@ -27,6 +28,7 @@ export const alarmPush = onSchedule(
     const minute =
       parts.find((p) => p.type === 'minute')?.value.padStart(2, '0') ?? '00';
     const currentTime = `${hour}:${minute}`;
+    const currentWeekday = getSeoulWeekday0To6(now);
 
     const snapshot = await db
       .collection('alarms')
@@ -74,6 +76,9 @@ export const alarmPush = onSchedule(
 
     for (const doc of snapshot.docs) {
       const alarm = doc.data();
+      const weekdays = normalizeAlarmWeekdays(alarm.weekdays);
+      if (!weekdays.includes(currentWeekday)) continue;
+
       const region = alarm.region || '서울';
       const uid = alarm.uid;
 
