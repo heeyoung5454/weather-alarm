@@ -5,81 +5,18 @@
         <span class="title-icon" aria-hidden="true">🔔</span>
         <span>알림</span>
       </h2>
-      <button class="add-btn" @click="addAlarm">+</button>
+      <button class="add-btn" type="button" @click="goToAddAlarm">+</button>
     </div>
 
     <div class="alarm-list">
-      <div v-for="(alarm, index) in alarms" :key="alarm.id" class="alarm-item">
-        <div class="alarm-main">
-          <div class="time">
-            <span class="time-icon" aria-hidden="true"></span>
-            <button class="time-button" type="button" @click="openTimePicker(index)">
-              {{ alarm.time }}
-            </button>
-          </div>
-
-          <label class="switch">
-            <input type="checkbox" v-model="alarm.enabled" @change="persistAlarm(alarm)" />
-            <span class="slider"></span>
-          </label>
-        </div>
-
-        <div class="alarm-weekdays" role="group" aria-label="요일">
-          <div class="weekday-chips">
-            <button
-              v-for="day in ALL_WEEKDAYS"
-              :key="day"
-              type="button"
-              class="weekday-chip"
-              :class="{ active: isWeekdayOn(alarm, day) }"
-              @click="toggleWeekday(alarm, day)"
-            >
-              {{ WEEKDAY_LABELS[day] }}
-            </button>
-          </div>
-        </div>
-
-        <div class="alarm-sub">
-          <select v-model="alarm.region" @change="persistAlarm(alarm)">
-            <option v-for="region in regionKeys" :key="region" :value="region">
-              {{ region }}
-            </option>
-          </select>
-
-          <button class="delete-btn" @click="removeAlarm(index)">삭제</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 5분 단위 시간 선택 팝업 -->
-    <div v-if="isTimePickerOpen" class="time-picker-backdrop" @click.self="closeTimePicker">
-      <div class="time-picker-modal">
-        <h3 class="time-picker-title">알림 시간 선택</h3>
-
-        <div class="time-picker-body">
-          <div class="time-picker-column">
-            <p class="column-label">시</p>
-            <ul class="time-list">
-              <li v-for="h in hours" :key="h" :class="['time-item', { active: pickerHour === h }]" @click="pickerHour = h">
-                {{ h }}
-              </li>
-            </ul>
-          </div>
-          <div class="time-picker-column">
-            <p class="column-label">분</p>
-            <ul class="time-list">
-              <li v-for="m in minutes" :key="m" :class="['time-item', { active: pickerMinute === m }]" @click="pickerMinute = m">
-                {{ m }}
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="time-picker-footer">
-          <button type="button" class="picker-cancel" @click="closeTimePicker">취소</button>
-          <button type="button" class="picker-confirm" @click="confirmTime">확인</button>
-        </div>
-      </div>
+      <AlarmItem
+        v-for="(alarm, index) in alarms"
+        :key="alarm.id"
+        :alarm="alarm"
+        :index="index"
+        @remove="removeAlarm"
+        @persist="persistAlarm"
+      />
     </div>
 
     <ConfirmDialog
@@ -96,10 +33,11 @@
 </template>
 
 <script setup lang="ts">
-import { collection, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs } from "firebase/firestore";
+import { collection, updateDoc, deleteDoc, doc, query, where, getDocs } from "firebase/firestore";
 import ConfirmDialog from "../../../components/ConfirmDialog.vue";
+import AlarmItem from "./AlarmItem.vue";
 
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted } from "vue";
 import { onAuthStateChanged } from "firebase/auth";
 import { usePush } from "../../../composables/usePush";
 import { saveUser } from "../../../composables/useUser";
@@ -107,14 +45,14 @@ import { useRegions } from "../../../composables/useRegions";
 
 const { $db, $auth } = useNuxtApp();
 
-const { regions: regionDocs, fetchRegions } = useRegions();
-const regionKeys = computed<string[]>(() => (regionDocs.value ?? []).map((r: any) => r.name));
+// @ts-ignore - Nuxt auto-import
+const router = useRouter();
+
+const { fetchRegions } = useRegions();
 
 const alarms = ref<any[]>([]);
 
-/** 0=일 … 6=토 (Date.getDay()와 동일, 스케줄러와 맞춤) */
 const ALL_WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
-const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
 
 const normalizeWeekdays = (raw: unknown): number[] => {
   if (!Array.isArray(raw) || raw.length === 0) return [...ALL_WEEKDAYS];
@@ -123,69 +61,10 @@ const normalizeWeekdays = (raw: unknown): number[] => {
   return Array.from(new Set(nums)).sort((a, b) => a - b);
 };
 
-const isWeekdayOn = (alarm: any, day: number) => {
-  const w = normalizeWeekdays(alarm.weekdays);
-  return w.includes(day);
-};
-
-const toggleWeekday = (alarm: any, day: number) => {
-  let w = normalizeWeekdays(alarm.weekdays);
-  const set = new Set(w);
-  if (set.has(day)) {
-    if (set.size <= 1) return;
-    set.delete(day);
-  } else {
-    set.add(day);
-  }
-  w = Array.from(set).sort((a, b) => a - b);
-  alarm.weekdays = w;
-  persistAlarm(alarm);
-};
-
-// 5분 단위 시간 선택용 상태
-const isTimePickerOpen = ref(false);
-const editingIndex = ref<number | null>(null);
 const isDeleteDialogOpen = ref(false);
 const deleteTargetIndex = ref<number | null>(null);
-const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
-const minutes = ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"];
-const pickerHour = ref("07");
-const pickerMinute = ref("00");
 
-const openTimePicker = (index: number) => {
-  const alarm = alarms.value[index];
-  if (alarm?.time) {
-    const [h, m] = String(alarm.time).split(":");
-    if (hours.includes(h)) pickerHour.value = h;
-    if (minutes.includes(m)) pickerMinute.value = m;
-  }
-  editingIndex.value = index;
-  isTimePickerOpen.value = true;
-};
-
-const closeTimePicker = () => {
-  isTimePickerOpen.value = false;
-  editingIndex.value = null;
-};
-
-const confirmTime = () => {
-  if (editingIndex.value === null) return;
-  const time = `${pickerHour.value}:${pickerMinute.value}`;
-  const targetAlarm = alarms.value[editingIndex.value];
-  targetAlarm.time = time;
-  persistAlarm(targetAlarm);
-  closeTimePicker();
-};
-
-const defaultAlarm = () => ({
-  time: "07:00",
-  region: "서울",
-  enabled: true,
-  weekdays: [...ALL_WEEKDAYS],
-});
-
-/* 알람 추가 */
-const addAlarm = async () => {
+const goToAddAlarm = async () => {
   const user = $auth.currentUser;
   if (!user) return;
 
@@ -195,22 +74,7 @@ const addAlarm = async () => {
     return;
   }
 
-  const alarm = defaultAlarm();
-  const refDoc = await addDoc(collection($db, "alarms"), {
-    uid: user.uid,
-    token,
-    time: alarm.time,
-    region: alarm.region,
-    enabled: alarm.enabled,
-    weekdays: alarm.weekdays,
-    createdAt: new Date(),
-  });
-
-  alarms.value.push({
-    id: refDoc.id,
-    ...alarm,
-    isNew: false,
-  });
+  router.push("/alarm/edit/new");
 };
 
 /* 알람 삭제 */
@@ -338,245 +202,6 @@ onMounted(() => {
   background: none;
   color: #222;
   cursor: pointer;
-}
-
-.alarm-item {
-  border-bottom: 1px solid #d8e7f3;
-  padding: 18px 0;
-}
-
-.alarm-main {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.alarm-weekdays {
-  margin-top: 12px;
-}
-
-.weekday-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.weekday-chip {
-  min-width: 32px;
-  padding: 5px 8px;
-  border-radius: 999px;
-  border: 1px solid #d8e7f3;
-  background: #f4f7fb;
-  color: #6b8399;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.weekday-chip.active {
-  background: #d9f0ff;
-  border-color: #2c83c9;
-  color: #17446d;
-}
-
-.weekday-chip:hover:not(.active) {
-  background: #edf2f6;
-}
-
-.time {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.time-icon {
-  width: 20px;
-  height: 20px;
-  border-radius: 999px;
-  border: 2px solid #4b5b6a;
-  position: relative;
-}
-
-.time-icon::before,
-.time-icon::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform-origin: bottom center;
-  background: #4b5b6a;
-}
-
-.time-icon::before {
-  width: 2px;
-  height: 6px;
-  transform: translate(-50%, -90%);
-}
-
-.time-icon::after {
-  width: 2px;
-  height: 4px;
-  transform: translate(-10%, -50%) rotate(90deg);
-}
-
-.time-button {
-  font-size: 28px;
-  font-weight: 600;
-  border: none;
-  background: none;
-  padding: 0;
-  cursor: pointer;
-}
-
-.alarm-sub {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 10px;
-}
-
-.time-picker-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.time-picker-modal {
-  width: 320px;
-  max-width: 90%;
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 18px 16px 14px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
-}
-
-.time-picker-title {
-  margin: 0 0 12px;
-  font-size: 18px;
-  font-weight: 700;
-  text-align: center;
-}
-
-.time-picker-body {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.time-picker-column {
-  flex: 1;
-}
-
-.column-label {
-  margin: 0 0 6px;
-  font-size: 13px;
-  color: #6b8399;
-}
-
-.time-list {
-  margin: 0;
-  padding: 4px 0;
-  list-style: none;
-  max-height: 180px;
-  overflow-y: auto;
-  border-radius: 10px;
-  background: #f4f7fb;
-}
-
-.time-item {
-  padding: 6px 8px;
-  font-size: 15px;
-  text-align: center;
-  cursor: pointer;
-  color: #4b5b6a;
-}
-
-.time-item.active {
-  background: #2c83c9;
-  color: #fff;
-  font-weight: 600;
-}
-
-.time-picker-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.picker-cancel,
-.picker-confirm {
-  min-width: 72px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: none;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.picker-cancel {
-  background: #edf2f6;
-  color: #4b5b6a;
-}
-
-.picker-confirm {
-  background: #2c83c9;
-  color: #fff;
-}
-
-select {
-  border: none;
-  background: none;
-  font-size: 14px;
-  color: #666;
-}
-
-.delete-btn {
-  background: none;
-  border: none;
-  color: #ff3b30;
-  cursor: pointer;
-}
-
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 50px;
-  height: 28px;
-}
-
-.switch input {
-  opacity: 0;
-}
-
-.slider {
-  position: absolute;
-  inset: 0;
-  background: #ccc;
-  border-radius: 34px;
-}
-
-.slider:before {
-  content: "";
-  position: absolute;
-  height: 22px;
-  width: 22px;
-  left: 3px;
-  bottom: 3px;
-  background: white;
-  border-radius: 50%;
-  transition: 0.2s;
-}
-
-input:checked + .slider {
-  background: #34c759;
-}
-
-input:checked + .slider:before {
-  transform: translateX(22px);
 }
 
 </style>
