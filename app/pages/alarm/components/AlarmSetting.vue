@@ -32,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import { collection, updateDoc, deleteDoc, doc, query, where, getDocs } from "firebase/firestore";
+import { collection, deleteField, updateDoc, deleteDoc, doc, query, where, getDocs } from "firebase/firestore";
 import ConfirmDialog from "../../../components/ConfirmDialog.vue";
 import AlarmItem from "./AlarmItem.vue";
 
@@ -129,12 +129,25 @@ const persistAlarm = async (alarm: any) => {
   const token = await getCurrentFcmToken(user);
   if (!token || !alarm?.id) return;
 
+  const rs = alarm.regionSource === "saved" ? "saved" : "national";
   await updateDoc(doc($db, "alarms", alarm.id), {
     token,
     time: alarm.time,
     region: alarm.region,
     enabled: alarm.enabled,
     weekdays: normalizeWeekdays(alarm.weekdays),
+    regionSource: rs,
+    ...(rs === "saved" && typeof alarm.savedLat === "number"
+      ? {
+          savedLat: alarm.savedLat,
+          savedLng: alarm.savedLng,
+          savedLabel: typeof alarm.savedLabel === "string" ? alarm.savedLabel : "",
+        }
+      : {
+          savedLat: deleteField(),
+          savedLng: deleteField(),
+          savedLabel: deleteField(),
+        }),
   });
 };
 

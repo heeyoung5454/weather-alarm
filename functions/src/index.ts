@@ -38,6 +38,35 @@ export const alarmPush = onSchedule(
 
     const baseUrl = 'https://weatheralarm-155bf.web.app';
 
+    const buildNotiWeatherUrl = (alarm: {
+      regionSource?: unknown;
+      savedLat?: unknown;
+      savedLng?: unknown;
+      savedLabel?: unknown;
+      region?: unknown;
+    }): { url: string; displayName: string } => {
+      const rs = alarm.regionSource;
+      if (
+        rs === 'saved' &&
+        typeof alarm.savedLat === 'number' &&
+        typeof alarm.savedLng === 'number'
+      ) {
+        const q = new URLSearchParams();
+        q.set('lat', String(alarm.savedLat));
+        q.set('lng', String(alarm.savedLng));
+        const label = typeof alarm.savedLabel === 'string' ? alarm.savedLabel.trim() : '';
+        if (label) q.set('label', label);
+        const displayName = label || '저장 지역';
+        return { url: `${baseUrl}/alarm/notiWeather?${q.toString()}`, displayName };
+      }
+      const region =
+        typeof alarm.region === 'string' && alarm.region.trim() ? alarm.region.trim() : '서울';
+      return {
+        url: `${baseUrl}/alarm/notiWeather?region=${encodeURIComponent(region)}`,
+        displayName: region,
+      };
+    };
+
     // alarms 문서는 uid당 여러 토큰(users.fcmTokens)을 통해 모두 전송하도록 변경
     const uidSet = new Set<string>();
     snapshot.docs.forEach((d) => {
@@ -79,13 +108,12 @@ export const alarmPush = onSchedule(
       const weekdays = normalizeAlarmWeekdays(alarm.weekdays);
       if (!weekdays.includes(currentWeekday)) continue;
 
-      const region = alarm.region || '서울';
       const uid = alarm.uid;
 
       const tokens = typeof uid === 'string' ? uidToTokens.get(uid) || [] : [];
       if (tokens.length === 0) continue;
 
-      const url = `${baseUrl}/alarm/notiWeather?region=${encodeURIComponent(region)}`;
+      const { url, displayName } = buildNotiWeatherUrl(alarm);
 
       await Promise.all(
         tokens.map((token) =>
@@ -93,11 +121,11 @@ export const alarmPush = onSchedule(
             token,
             notification: {
               title: '오늘 날씨 알림',
-              body: `${region} 날씨 확인하세요`,
+              body: `${displayName} 날씨 확인하세요`,
             },
             data: {
               url,
-              region,
+              region: displayName,
             },
           })
         )

@@ -14,9 +14,9 @@
         </NuxtLink>
       </div>
 
-      <template v-if="!regionParam">
-        <p class="error-text">지역 정보가 없습니다. URL에 region 파라미터를 넣어주세요.</p>
-        <p class="hint">예: /alarm/notiWeather?region=서울</p>
+      <template v-if="!regionCoords && !locationLoading">
+        <p class="error-text">지역 정보가 없습니다.</p>
+        <p class="hint">예: ?region=서울 또는 ?lat=37.5&amp;lng=127.0&amp;label=주소</p>
       </template>
 
       <template v-if="regionCoords">
@@ -28,7 +28,7 @@
           <WeatherSummaryCard
             :now-date="nowDate"
             :now-time="nowTime"
-            :location-text="regionParam"
+            :location-text="locationDisplayText"
             :loading="isLoading"
             :icon-class="getWeatherIcon(weatherList?.sky?.value, weatherList?.pty?.value)"
             :weather-text="weatherList?.pty?.value !== '0' ? weatherList?.pty?.text : weatherList?.sky?.text"
@@ -44,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import { useRoute } from "vue-router";
 import { getUltraSrtNcst, getUltraSrtFcst } from "../../composables/useWeather";
 import { getBaseDateTime, getFcstBaseTime } from "../../utils/timeConvert";
@@ -62,11 +62,28 @@ const regionParam = computed(() => {
 });
 
 const regionCoords = computed(() => {
+  const latQ = route.query.lat;
+  const lngQ = route.query.lng ?? route.query.lon;
+  if (typeof latQ === "string" && typeof lngQ === "string") {
+    const lat = parseFloat(latQ);
+    const lng = parseFloat(lngQ);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lon: lng };
+    }
+  }
   if (!regionParam.value) return null;
   const region = regionsByName.value[regionParam.value];
   if (!region) return null;
   return { lat: region.lat, lon: region.lon };
 });
+
+const locationDisplayText = computed(() => {
+  const lab = route.query.label;
+  if (typeof lab === "string" && lab.trim()) return lab.trim();
+  return regionParam.value || "날씨";
+});
+
+const locationLoading = ref(true);
 
 const isLoading = ref(true);
 const weatherError = ref("");
@@ -166,13 +183,24 @@ const fetchWeather = async () => {
 };
 
 onMounted(async () => {
+  locationLoading.value = true;
   await fetchRegions();
+  locationLoading.value = false;
   if (regionCoords.value) {
     fetchWeather();
   } else {
     isLoading.value = false;
   }
 });
+
+watch(
+  () => route.query,
+  async () => {
+    const coords = regionCoords.value;
+    if (coords) await fetchWeather();
+  },
+  { deep: true },
+);
 </script>
 
 <style scoped>

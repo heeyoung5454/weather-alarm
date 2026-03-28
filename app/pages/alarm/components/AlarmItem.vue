@@ -19,7 +19,7 @@
         </div>
 
         <div class="summary-block region-line">
-          <span class="region-name">{{ alarm.region }}</span>
+          <span class="region-name">{{ alarmRegionLabel(alarm) }}</span>
         </div>
       </button>
 
@@ -57,6 +57,11 @@ const router = useRouter();
 const goToEdit = () => {
   if (!props.alarm?.id) return;
   router.push(`/alarm/edit/${props.alarm.id}`);
+};
+
+const alarmRegionLabel = (a: any) => {
+  if (a?.regionSource === "saved" && typeof a?.savedLabel === "string" && a.savedLabel.trim()) return a.savedLabel.trim();
+  return a?.region ?? "";
 };
 
 const normalizeWeekdays = (raw: unknown): number[] => {

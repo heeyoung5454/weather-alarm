@@ -52,11 +52,29 @@
 
         <div class="edit-section">
           <p class="field-label">설정 지역</p>
-          <select v-model="alarm.region" class="region-select">
+          <div class="region-mode-row" role="group" aria-label="지역 선택 방식">
+            <button type="button" class="region-mode-btn" :class="{ active: alarm.regionSource === 'national' }" @click="setRegionMode('national')">
+              전국 지역
+            </button>
+            <button type="button" class="region-mode-btn" :class="{ active: alarm.regionSource === 'saved' }" @click="setRegionMode('saved')">
+              내 저장 지역
+            </button>
+          </div>
+
+          <select v-if="alarm.regionSource === 'national'" v-model="alarm.region" class="region-select">
             <option v-for="region in regionKeys" :key="region" :value="region">
               {{ region }}
             </option>
           </select>
+
+          <template v-else>
+            <p v-if="userRegions.length === 0" class="region-hint">저장된 지역이 없습니다. 홈에서 위치를 허용하거나 계정에서 확인해 주세요.</p>
+            <select v-else v-model="savedKeyForUi" class="region-select" @change="onSavedRegionSelect">
+              <option v-for="e in userRegions" :key="userRegionKey(e)" :value="userRegionKey(e)">
+                {{ savedRegionOptionLabel(e) }}
+              </option>
+            </select>
+          </template>
         </div>
 
         <div class="edit-actions">
@@ -72,12 +90,13 @@
 </template>
 
 <script setup lang="ts">
-import { addDoc, collection, doc, getDoc, updateDoc } from "firebase/firestore";
+import { addDoc, collection, deleteField, doc, getDoc, updateDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
 import { usePush } from "../../../composables/usePush";
 import { saveUser } from "../../../composables/useUser";
 import { useRegions } from "../../../composables/useRegions";
+import type { UserRegionEntry } from "../../../composables/useUserRegions";
 
 // @ts-ignore
 const router = useRouter();
@@ -87,6 +106,54 @@ const { $db, $auth } = useNuxtApp();
 
 const { regions: regionDocs, fetchRegions } = useRegions();
 const regionKeys = computed<string[]>(() => (regionDocs.value ?? []).map((r: any) => r.name));
+
+const userRegions = ref<UserRegionEntry[]>([]);
+const savedKeyForUi = ref("");
+
+const userRegionKey = (e: UserRegionEntry) => `${Number(e.lat).toFixed(5)},${Number(e.lng).toFixed(5)}`;
+
+const savedRegionOptionLabel = (e: UserRegionEntry) => {
+  if (typeof e.label === "string" && e.label.trim()) return e.label.trim();
+  return `${Number(e.lat).toFixed(4)}, ${Number(e.lng).toFixed(4)}`;
+};
+
+const loadUserRegions = async (uid: string) => {
+  const snap = await getDoc(doc($db, "userRegions", uid));
+  const arr = snap.data()?.regions;
+  userRegions.value = Array.isArray(arr) ? arr : [];
+};
+
+const applyUserRegionEntry = (e: UserRegionEntry) => {
+  if (!alarm.value) return;
+  alarm.value.savedLat = e.lat;
+  alarm.value.savedLng = e.lng;
+  alarm.value.savedLabel = typeof e.label === "string" ? e.label : "";
+  alarm.value.region = alarm.value.savedLabel.trim() || "저장 지역";
+  savedKeyForUi.value = userRegionKey(e);
+};
+
+const onSavedRegionSelect = () => {
+  const e = userRegions.value.find((r) => userRegionKey(r) === savedKeyForUi.value);
+  if (e) applyUserRegionEntry(e);
+};
+
+const setRegionMode = (mode: "national" | "saved") => {
+  if (!alarm.value) return;
+  if (mode === "saved" && userRegions.value.length === 0) {
+    alert("저장된 지역이 없습니다. 홈에서 위치를 허용하거나 계정에서 확인해 주세요.");
+    return;
+  }
+  alarm.value.regionSource = mode;
+  if (mode === "national") {
+    const keys = regionKeys.value;
+    if (keys.length && !keys.includes(alarm.value.region)) {
+      alarm.value.region = keys[0];
+    }
+  } else if (mode === "saved") {
+    const first = userRegions.value[0];
+    if (first) applyUserRegionEntry(first);
+  }
+};
 
 const isCreateMode = computed(() => String(route.params.id || "") === "new");
 const pageTitle = computed(() => (isCreateMode.value ? "알림 등록" : "알림 수정"));
@@ -142,26 +209,65 @@ const save = async () => {
     return;
   }
 
+  const a = alarm.value;
+  if (a.regionSource === "saved") {
+    if (typeof a.savedLat !== "number" || typeof a.savedLng !== "number") {
+      alert("저장 지역을 선택해 주세요.");
+      return;
+    }
+  }
+
   saveLoading.value = true;
   try {
+    const commonFields = {
+      token,
+      time: a.time,
+      enabled: a.enabled,
+      weekdays: normalizeWeekdays(a.weekdays),
+    };
+
     if (isCreateMode.value) {
-      await addDoc(collection($db, "alarms"), {
+      const base = {
         uid: user.uid,
-        token,
-        time: alarm.value.time,
-        region: alarm.value.region,
-        enabled: alarm.value.enabled,
-        weekdays: normalizeWeekdays(alarm.value.weekdays),
+        ...commonFields,
         createdAt: new Date(),
-      });
-    } else if (alarm.value.id) {
-      await updateDoc(doc($db, "alarms", alarm.value.id), {
-        token,
-        time: alarm.value.time,
-        region: alarm.value.region,
-        enabled: alarm.value.enabled,
-        weekdays: normalizeWeekdays(alarm.value.weekdays),
-      });
+      };
+      if (a.regionSource === "saved") {
+        await addDoc(collection($db, "alarms"), {
+          ...base,
+          regionSource: "saved",
+          region: a.region,
+          savedLat: a.savedLat,
+          savedLng: a.savedLng,
+          savedLabel: typeof a.savedLabel === "string" ? a.savedLabel : "",
+        });
+      } else {
+        await addDoc(collection($db, "alarms"), {
+          ...base,
+          regionSource: "national",
+          region: a.region,
+        });
+      }
+    } else if (a.id) {
+      if (a.regionSource === "saved") {
+        await updateDoc(doc($db, "alarms", a.id), {
+          ...commonFields,
+          regionSource: "saved",
+          region: a.region,
+          savedLat: a.savedLat,
+          savedLng: a.savedLng,
+          savedLabel: typeof a.savedLabel === "string" ? a.savedLabel : "",
+        });
+      } else {
+        await updateDoc(doc($db, "alarms", a.id), {
+          ...commonFields,
+          regionSource: "national",
+          region: a.region,
+          savedLat: deleteField(),
+          savedLng: deleteField(),
+          savedLabel: deleteField(),
+        });
+      }
     }
     router.push("/alarm");
   } catch {
@@ -225,6 +331,7 @@ const initNewAlarm = () => {
     id: null,
     time: "06:00",
     region: "서울",
+    regionSource: "national",
     enabled: true,
     weekdays: [...ALL_WEEKDAYS],
   };
@@ -239,6 +346,7 @@ const loadAlarm = async (id: string) => {
 
   if (id === "new") {
     initNewAlarm();
+    savedKeyForUi.value = "";
     syncScrollFromAlarmTime();
     return;
   }
@@ -261,6 +369,23 @@ const loadAlarm = async (id: string) => {
     weekdays: normalizeWeekdays(data.weekdays),
   };
   alarm.value.time = normalizeTimeToFiveMin(String(alarm.value.time ?? "06:00"));
+  if (!alarm.value.regionSource) alarm.value.regionSource = "national";
+  if (alarm.value.regionSource === "saved") {
+    if (typeof alarm.value.savedLat !== "number" || typeof alarm.value.savedLng !== "number") {
+      alarm.value.regionSource = "national";
+      if (!alarm.value.region) alarm.value.region = "서울";
+    } else {
+      const key = `${alarm.value.savedLat.toFixed(5)},${alarm.value.savedLng.toFixed(5)}`;
+      const stillExists = userRegions.value.some((r) => userRegionKey(r) === key);
+      if (!stillExists) {
+        alarm.value.regionSource = "national";
+        if (!alarm.value.region) alarm.value.region = "서울";
+        savedKeyForUi.value = "";
+      } else {
+        savedKeyForUi.value = key;
+      }
+    }
+  }
   syncScrollFromAlarmTime();
 };
 
@@ -280,6 +405,7 @@ onMounted(() => {
     }
     loadError.value = "";
     await fetchRegions();
+    await loadUserRegions(user.uid);
     await loadAlarm(id);
   });
 });
@@ -533,6 +659,37 @@ onUnmounted(() => {
 .weekday-pill:focus-visible {
   outline: 2px solid #2c83c9;
   outline-offset: 1px;
+}
+
+.region-mode-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.region-mode-btn {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #d8e7f3;
+  background: #f4f7fb;
+  font-size: 14px;
+  font-weight: 700;
+  color: #6b8399;
+  cursor: pointer;
+}
+
+.region-mode-btn.active {
+  border-color: #2c83c9;
+  background: #e8f4ff;
+  color: #17446d;
+}
+
+.region-hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #6b8399;
 }
 
 .region-select {
