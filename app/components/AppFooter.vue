@@ -15,7 +15,7 @@
 
 <style scoped>
 .app-footer {
-  padding: 18px 24px 60px;
+  padding: 18px 24px 28px;
   text-align: left;
   color: #4b5b6a;
   font-size: 12px;

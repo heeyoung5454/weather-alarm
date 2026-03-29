@@ -1,6 +1,6 @@
 <template>
-  <main class="alarm-edit-page">
-    <div class="edit-shell">
+  <main class="alarm-page">
+    <div class="alarm-shell">
       <header class="page-top-line">
         <button type="button" class="back-btn" aria-label="뒤로" @click="router.push('/alarm')">
           <svg class="back-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -53,12 +53,8 @@
         <div class="edit-section">
           <p class="field-label">설정 지역</p>
           <div class="region-mode-row" role="group" aria-label="지역 선택 방식">
-            <button type="button" class="region-mode-btn" :class="{ active: alarm.regionSource === 'national' }" @click="setRegionMode('national')">
-              전국 지역
-            </button>
-            <button type="button" class="region-mode-btn" :class="{ active: alarm.regionSource === 'saved' }" @click="setRegionMode('saved')">
-              내 저장 지역
-            </button>
+            <button type="button" class="region-mode-btn" :class="{ active: alarm.regionSource === 'national' }" @click="setRegionMode('national')">전국 지역</button>
+            <button type="button" class="region-mode-btn" :class="{ active: alarm.regionSource === 'saved' }" @click="setRegionMode('saved')">내 저장 지역</button>
           </div>
 
           <select v-if="alarm.regionSource === 'national'" v-model="alarm.region" class="region-select">
@@ -416,14 +412,14 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.alarm-edit-page {
+.alarm-page {
   min-height: 100vh;
   background: linear-gradient(180deg, #8ed0ff 0%, #d9f0ff 50%, #f6fbff 100%);
   padding: 24px;
   box-sizing: border-box;
 }
 
-.edit-shell {
+.alarm-shell {
   max-width: 480px;
   margin: 0 auto;
 }
@@ -431,24 +427,36 @@ onUnmounted(() => {
 .page-top-line {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 0 18px;
+  justify-content: flex-start;
+  position: relative;
+  max-width: 420px;
+  margin: 0 auto 14px;
+  padding: 8px 0 14px;
   border-bottom: 1px solid rgba(23, 68, 109, 0.18);
-  margin-bottom: 16px;
 }
 
 .back-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 999px;
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   border: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: #17446d;
-  background: #ffffffd9;
-  box-shadow: 0 4px 10px rgba(29, 76, 122, 0.12);
+  background: transparent;
+  border-radius: 10px;
   cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.back-btn:hover {
+  background: rgba(23, 68, 109, 0.08);
 }
 
 .back-icon {
@@ -458,17 +466,33 @@ onUnmounted(() => {
 
 .page-title {
   margin: 0;
+  width: 100%;
+  padding: 0 40px;
+  box-sizing: border-box;
   font-size: 20px;
   font-weight: 800;
   color: #17446d;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .alarm-page {
+    padding: 16px;
+  }
 }
 
 .hint-card {
-  padding: 24px;
+  max-width: 420px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 20px;
   text-align: center;
   background: #ffffffd9;
-  border-radius: 20px;
+  backdrop-filter: blur(4px);
+  border-radius: 24px;
+  box-shadow: 0 12px 30px rgba(29, 76, 122, 0.2);
   color: #4b5b6a;
+  font-family: -apple-system, BlinkMacSystemFont;
 }
 
 .primary-btn {
@@ -483,6 +507,9 @@ onUnmounted(() => {
 }
 
 .edit-card {
+  max-width: 420px;
+  margin-left: auto;
+  margin-right: auto;
   padding: 20px;
   font-family: -apple-system, BlinkMacSystemFont;
   background: #ffffffd9;

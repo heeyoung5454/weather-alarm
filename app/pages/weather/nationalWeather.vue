@@ -1,11 +1,6 @@
 <template>
   <div class="national-weather-page">
     <header class="page-header">
-      <NuxtLink to="/" class="back-button">
-        <svg class="back-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M19 12H5M5 12l7 7m-7-7l7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </NuxtLink>
       <h1 class="page-title">전국 날씨</h1>
     </header>
 
@@ -150,7 +145,7 @@ onMounted(async () => {
 
 <style scoped>
 .national-weather-page {
-  min-height: calc(100vh - 156px);
+  min-height: calc(100vh - 164px);
   background: linear-gradient(180deg, #8ed0ff 0%, #d9f0ff 50%, #f6fbff 100%);
   padding: 24px;
   box-sizing: border-box;
@@ -159,37 +154,11 @@ onMounted(async () => {
 .page-header {
   display: flex;
   align-items: center;
-  gap: 16px;
+  justify-content: center;
   margin-bottom: 24px;
   max-width: 800px;
   margin-left: auto;
   margin-right: auto;
-}
-
-.back-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: #ffffffd9;
-  backdrop-filter: blur(4px);
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s;
-  text-decoration: none;
-}
-
-.back-button:hover {
-  background: #ffffff;
-  transform: scale(1.05);
-}
-
-.back-icon {
-  width: 20px;
-  height: 20px;
-  color: #2c83c9;
 }
 
 .page-title {
@@ -197,6 +166,7 @@ onMounted(async () => {
   font-size: 24px;
   font-weight: 800;
   color: #17446d;
+  text-align: center;
 }
 
 .content-container {
