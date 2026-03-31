@@ -1,10 +1,6 @@
 <template>
   <main class="account-page">
-    <div class="account-shell">
-      <header class="page-top-line">
-        <h1 class="page-title">계정 관리</h1>
-      </header>
-
+    <div class="page-content">
       <div class="card">
         <div v-if="isLoggedIn === true" class="content">
           <p class="row">
@@ -546,27 +542,13 @@ onMounted(() => {
   box-sizing: border-box;
 }
 
-.account-shell {
+.page-content {
+  width: 100%;
   max-width: 480px;
   margin: 0 auto;
-}
-
-.page-top-line {
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  max-width: 420px;
-  margin: 0 auto 14px;
-  padding: 8px 0 14px;
-  border-bottom: 1px solid rgba(23, 68, 109, 0.18);
-}
-
-.page-title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 800;
-  color: #17446d;
-  text-align: center;
+  flex-direction: column;
+  gap: 24px;
 }
 
 .card {

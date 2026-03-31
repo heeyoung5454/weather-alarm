@@ -3,11 +3,7 @@
     <div class="page-content">
       <!-- 상단 영역 -->
       <div class="header-section">
-        <button v-if="isLoggedIn === true" type="button" class="header-logout-btn" @click="goToAccount" aria-label="My">
-          <span class="alarm-icon">👤</span>
-          <span class="alarm-label">My</span>
-        </button>
-        <button v-else-if="isLoggedIn === false" type="button" class="header-login-btn" :disabled="loginLoading || isConsentModalOpen" @click="openConsentModal">
+        <button v-if="isLoggedIn === false" type="button" class="header-login-btn" :disabled="loginLoading || isConsentModalOpen" @click="openConsentModal">
           <span class="alarm-icon">🔑</span>
           <span class="alarm-label">구글 로그인</span>
         </button>
@@ -276,10 +272,6 @@ const handleGoogleLogin = async () => {
   } finally {
     loginLoading.value = false;
   }
-};
-
-const goToAccount = () => {
-  router.push("/account");
 };
 
 const openConsentModal = () => {
@@ -755,38 +747,6 @@ const startAlarm = async () => {
 }
 
 .header-login-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.header-logout-btn {
-  width: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border: none;
-  border-radius: 999px;
-  background: #ffebeb;
-  color: #b91c1c;
-  font-size: 14px;
-  font-weight: 700;
-  box-shadow: 0 4px 14px rgba(255, 0, 0, 0.12);
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.header-logout-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(255, 0, 0, 0.18);
-}
-
-.header-logout-btn:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.header-logout-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }

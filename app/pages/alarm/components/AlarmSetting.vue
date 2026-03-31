@@ -186,8 +186,7 @@ onMounted(() => {
 
 <style scoped>
 .container {
-  max-width: 420px;
-  margin: auto;
+  width: 100%;
   padding: 20px;
   font-family: -apple-system, BlinkMacSystemFont;
   background: #ffffffd9;

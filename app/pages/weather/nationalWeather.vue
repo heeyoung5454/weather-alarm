@@ -1,38 +1,36 @@
 <template>
   <div class="national-weather-page">
-    <header class="page-header">
-      <h1 class="page-title">전국 날씨</h1>
-    </header>
+    <div class="page-content">
+      <div class="content-container">
+        <!-- 로딩 -->
+        <div v-if="isLoading" class="loading-container">
+          <div class="spinner"></div>
+          <p class="loading-text">전국 날씨 정보를 불러오는 중...</p>
+        </div>
 
-    <div class="content-container">
-      <!-- 로딩 -->
-      <div v-if="isLoading" class="loading-container">
-        <div class="spinner"></div>
-        <p class="loading-text">전국 날씨 정보를 불러오는 중...</p>
-      </div>
+        <!-- 지도 및 날씨 정보 -->
+        <div v-else class="map-container">
+          <div class="map-wrapper">
+            <!-- 배경 지도 이미지 -->
+            <img src="@/assets/images/national_map.png" alt="대한민국 지도" class="map-image" />
 
-      <!-- 지도 및 날씨 정보 -->
-      <div v-else class="map-container">
-        <div class="map-wrapper">
-          <!-- 배경 지도 이미지 -->
-          <img src="@/assets/images/national_map.png" alt="대한민국 지도" class="map-image" />
-
-          <!-- 클릭 가능한 지역 영역 -->
-          <div
-            v-for="region in regions"
-            :key="region.name"
-            class="region-area"
-            :style="{
-              left: `${region.position.x}%`,
-              top: `${region.position.y}%`,
-            }"
-            @click="selectRegion(region.name)"
-          >
-            <div class="region-marker">
-              <div class="region-label">{{ region.name }}</div>
-              <div class="region-weather">
-                <div class="current-temp">{{ region.data?.current?.temp }}°</div>
-                <div class="region-icon">{{ getWeatherEmoji(region.data?.current?.sky, region.data?.current?.rain) }}</div>
+            <!-- 클릭 가능한 지역 영역 -->
+            <div
+              v-for="region in regions"
+              :key="region.name"
+              class="region-area"
+              :style="{
+                left: `${region.position.x}%`,
+                top: `${region.position.y}%`,
+              }"
+              @click="selectRegion(region.name)"
+            >
+              <div class="region-marker">
+                <div class="region-label">{{ region.name }}</div>
+                <div class="region-weather">
+                  <div class="current-temp">{{ region.data?.current?.temp }}°</div>
+                  <div class="region-icon">{{ getWeatherEmoji(region.data?.current?.sky, region.data?.current?.rain) }}</div>
+                </div>
               </div>
             </div>
           </div>
@@ -151,26 +149,17 @@ onMounted(async () => {
   box-sizing: border-box;
 }
 
-.page-header {
+.page-content {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 24px;
-  max-width: 800px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.page-title {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 800;
-  color: #17446d;
-  text-align: center;
+  flex-direction: column;
+  gap: 24px;
 }
 
 .content-container {
-  max-width: 800px;
+  width: 100%;
   margin: 0 auto;
   background: #ffffffd9;
   backdrop-filter: blur(4px);

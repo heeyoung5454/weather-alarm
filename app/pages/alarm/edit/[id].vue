@@ -429,7 +429,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: flex-start;
   position: relative;
-  max-width: 420px;
+  max-width: 480px;
   margin: 0 auto 14px;
   padding: 8px 0 14px;
   border-bottom: 1px solid rgba(23, 68, 109, 0.18);
@@ -482,9 +482,7 @@ onUnmounted(() => {
 }
 
 .hint-card {
-  max-width: 420px;
-  margin-left: auto;
-  margin-right: auto;
+  width: 100%;
   padding: 20px;
   text-align: center;
   background: #ffffffd9;
@@ -507,9 +505,7 @@ onUnmounted(() => {
 }
 
 .edit-card {
-  max-width: 420px;
-  margin-left: auto;
-  margin-right: auto;
+  width: 100%;
   padding: 20px;
   font-family: -apple-system, BlinkMacSystemFont;
   background: #ffffffd9;
