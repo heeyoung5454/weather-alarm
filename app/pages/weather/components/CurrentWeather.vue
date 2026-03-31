@@ -203,19 +203,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.weather-card {
-  width: 100%;
-  border-radius: 24px;
-  background: #ffffffd9;
-  backdrop-filter: blur(4px);
-  box-shadow: 0 12px 30px #1d4c7a29;
-  padding: 28px 24px 32px;
-  text-align: center;
-  position: relative;
-  box-sizing: border-box;
-  min-height: 332px;
-}
-
 .loading-overlay {
   position: absolute;
   inset: 0;

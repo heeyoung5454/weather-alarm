@@ -235,13 +235,6 @@ onMounted(async () => {
   box-shadow: 0 6px 16px rgba(29, 76, 122, 0.3);
 }
 
-.region-area.active .region-marker {
-  background: #2c83c9;
-  color: white;
-  transform: scale(1.2);
-  box-shadow: 0 8px 20px rgba(44, 131, 201, 0.5);
-}
-
 .region-marker {
   display: flex;
   flex-direction: column;
