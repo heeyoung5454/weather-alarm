@@ -67,7 +67,7 @@ const { $db } = useNuxtApp();
 
 // 지역 선택 함수 - 상세 날씨 페이지로 이동
 const selectRegion = (regionName: string) => {
-  router.push(`/alarm/notiWeather?region=${encodeURIComponent(regionName)}`);
+  router.push(`/weather/regionWeather?region=${encodeURIComponent(regionName)}`);
 };
 
 // 하늘 상태 코드에 따른 이모지 반환

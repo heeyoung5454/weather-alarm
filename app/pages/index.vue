@@ -1,28 +1,23 @@
 <template>
   <main class="page">
     <div class="page-content">
-      <!-- 상단 영역 -->
-      <div class="header-section">
-        <button v-if="isLoggedIn === false" type="button" class="header-login-btn" :disabled="loginLoading || isConsentModalOpen" @click="openConsentModal">
-          <span class="alarm-icon">🔑</span>
-          <span class="alarm-label">구글 로그인</span>
-        </button>
-      </div>
-
-      <!-- 현재 날씨 -->
-      <CurrentWeather
-        v-if="currentReady"
-        :initial-lat="position.lat"
-        :initial-lng="position.lng"
-        :use-saved-location="hasSavedLocation"
-        @update:position="handlePositionUpdate"
-        @update:location-error="handleLocationError"
+      <WeatherSummaryCard
+        :loading="weatherLoading"
+        :error-overlay-text="locationError || ''"
+        :location-text="weatherLocationText"
+        :location-label="homeLocationLabel"
+        :region-options="homeRegionOptions"
+        :region-value="activeRegionKey"
+        :now-date="nowDate"
+        :now-time="nowTime"
+        :icon-class="weatherIconClass"
+        :weather-text="weatherText"
+        :temperature-text="temperatureText"
         @refresh-location="refreshLocation"
+        @open-region-picker="openHomeRegionPicker"
       />
-      <div v-else class="current-loading-card">
-        <div class="spinner"></div>
-        <p class="loading-text">날씨 정보를 불러오는 중...</p>
-      </div>
+
+      <RegionPickerModal :open="isHomeRegionPickerOpen" title="내 지역" :options="homeRegionOptions || []" :value="activeRegionKey" @close="closeHomeRegionPicker" @select="selectHomeRegion" />
 
       <div v-if="hasAirKoreaKey" class="air-quality-card">
         <p class="air-quality-head">{{ airSummary?.sido ?? "—" }}</p>
@@ -72,14 +67,15 @@
 </template>
 
 <script setup lang="ts">
-import CurrentWeather from "./weather/components/CurrentWeather.vue";
+import WeatherSummaryCard from "../components/WeatherSummaryCard.vue";
+import RegionPickerModal from "../components/RegionPickerModal.vue";
 import WeeklyWeather from "./weather/components/WeeklyWeather.vue";
 import ToastMessage from "../components/ToastMessage.vue";
 import InfoTooltip from "../components/InfoTooltip.vue";
 import HourlyWeatherSection from "../components/HourlyWeatherSection.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 
-import { ref, onMounted, watch, computed } from "vue";
+import { ref, onMounted, watch, computed, onBeforeUnmount } from "vue";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 
@@ -88,6 +84,9 @@ import { saveUser } from "../composables/useUser";
 import { usePush } from "../composables/usePush";
 import { useLocation } from "../composables/useLocation";
 import { fetchAirQualityByCoords, type AirQualitySummary } from "../composables/useAirQuality";
+import { getUltraSrtNcst, getUltraSrtFcst } from "../composables/useWeather";
+import { getBaseDateTime, getFcstBaseTime } from "../utils/timeConvert";
+import { formatKoreanAddressLine, getRegionName } from "../utils/reverseGeo";
 
 const position = ref({
   lat: 0,
@@ -106,6 +105,75 @@ const syncedFcmUid = ref<string | null>(null);
 const loginLoading = ref(false);
 const userName = ref("");
 const isConsentModalOpen = ref(false);
+const isHomeRegionPickerOpen = ref(false);
+
+const homeLocationLabel = computed(() => (activeRegionKey.value === "" ? "현재 위치" : "내 지역"));
+
+const loadUserRegions = async (uid: string) => {
+  if (!uid) {
+    userRegions.value = [];
+    return;
+  }
+  try {
+    const regSnap = await getDoc(doc($db, "userRegions", uid));
+    if (regSnap.exists()) {
+      const rdata: any = regSnap.data();
+      userRegions.value = Array.isArray(rdata?.regions) ? rdata.regions : [];
+    } else {
+      userRegions.value = [];
+    }
+  } catch {
+    userRegions.value = [];
+  }
+};
+
+// ---- modal scroll lock (body) ----
+const bodyScrollLock = (() => {
+  let locked = false;
+  let scrollY = 0;
+  let prevOverflow = "";
+  let prevPosition = "";
+  let prevTop = "";
+  let prevWidth = "";
+
+  const lock = () => {
+    if (locked) return;
+    locked = true;
+    scrollY = typeof window !== "undefined" ? window.scrollY || 0 : 0;
+    const body = document.body;
+    prevOverflow = body.style.overflow;
+    prevPosition = body.style.position;
+    prevTop = body.style.top;
+    prevWidth = body.style.width;
+
+    body.style.overflow = "hidden";
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.width = "100%";
+  };
+
+  const unlock = () => {
+    if (!locked) return;
+    locked = false;
+    const body = document.body;
+    body.style.overflow = prevOverflow;
+    body.style.position = prevPosition;
+    body.style.top = prevTop;
+    body.style.width = prevWidth;
+    window.scrollTo(0, scrollY);
+  };
+
+  return { lock, unlock };
+})();
+
+watch(isHomeRegionPickerOpen, (open) => {
+  if (open) bodyScrollLock.lock();
+  else bodyScrollLock.unlock();
+});
+
+onBeforeUnmount(() => {
+  bodyScrollLock.unlock();
+});
 
 const consentMessage = `알림 서비스를 이용하기 위해 로그인이 필요합니다.
 
@@ -119,6 +187,130 @@ const handleLocationError = (error: string) => {
   locationError.value = error;
 };
 
+// ---- weather (root-owned) ----
+const weatherLoading = ref(false);
+const weatherError = ref("");
+const nowTime = ref("");
+const nowDate = ref("");
+const weatherList = ref<Record<string, any>>({});
+const weatherLocationText = ref("");
+
+const SKYMap: Record<string, string> = { "1": "맑음", "3": "구름많음", "4": "흐림" };
+const PTYMap: Record<string, string> = {
+  "0": "강수 없음",
+  "1": "비",
+  "2": "비/눈",
+  "3": "눈",
+  "5": "빗방울",
+  "6": "빗방울/눈날림",
+  "7": "눈날림",
+};
+
+const weatherIconClass = computed(() => {
+  const sky = String(weatherList.value?.sky?.value ?? "");
+  const pty = String(weatherList.value?.pty?.value ?? "");
+  if (pty && pty !== "0") {
+    if (pty === "1" || pty === "2" || pty === "5" || pty === "6") return "icon-rainy";
+    if (pty === "3" || pty === "7") return "icon-snow";
+  }
+  if (sky === "1") return "icon-sunny";
+  if (sky === "3") return "icon-suncloudy";
+  if (sky === "4") return "icon-cloudy";
+  return "unknown";
+});
+
+const weatherText = computed(() => {
+  if (weatherError.value) return weatherError.value;
+  const pty = String(weatherList.value?.pty?.value ?? "");
+  if (pty && pty !== "0") return weatherList.value?.pty?.text ?? "";
+  return weatherList.value?.sky?.text ?? "";
+});
+
+const temperatureText = computed(() => (weatherList.value?.t1h?.value ? `${weatherList.value.t1h.value}°C` : ""));
+
+const convertWeatherToObject = (ncstData: Record<string, string>, fcstData?: Record<string, string>) => {
+  const sky = fcstData?.SKY;
+  const pty = ncstData.PTY;
+  return {
+    pty: { label: "강수형태", value: pty, text: PTYMap[pty] || "알수없음" },
+    sky: { label: "하늘상태", value: sky, text: SKYMap[sky] || "알수없음" },
+    reh: { label: "습도", value: ncstData.REH, text: `${ncstData.REH}%` },
+    rn1: { label: "1시간강수량", value: ncstData.RN1, text: `${ncstData.RN1} mm` },
+    t1h: { label: "기온", value: ncstData.T1H, text: `${ncstData.T1H}°C` },
+    uuu: { label: "동서바람성분", value: ncstData.UUU, text: `${ncstData.UUU} m/s` },
+    vec: { label: "풍향", value: ncstData.VEC, text: `${ncstData.VEC}°` },
+    vvv: { label: "남북바람성분", value: ncstData.VVV, text: `${ncstData.VVV} m/s` },
+    wsd: { label: "풍속", value: ncstData.WSD, text: `${ncstData.WSD} m/s` },
+  };
+};
+
+const loadWeather = async () => {
+  const { lat, lng } = position.value;
+  if (typeof lat !== "number" || typeof lng !== "number" || (lat === 0 && lng === 0)) return;
+
+  weatherLoading.value = true;
+  weatherError.value = "";
+
+  try {
+    const { baseDate, baseTime } = getBaseDateTime();
+    nowDate.value = baseDate.slice(4, 6) + "월" + baseDate.slice(6, 8) + "일";
+    nowTime.value = baseTime.slice(0, 2) + "시";
+
+    // location text: saved-region override > reverse geo
+    const override = weatherLocationLabelOverride.value;
+    if (override) {
+      weatherLocationText.value = override;
+    } else {
+      try {
+        const geo = await getRegionName(lat, lng);
+        const line = formatKoreanAddressLine(geo);
+        if (line) weatherLocationText.value = line;
+      } catch {
+        /* keep */
+      }
+    }
+
+    const data = await getUltraSrtNcst(lat, lng, baseDate, baseTime);
+    if (data.response.header.resultCode !== "00") {
+      weatherError.value = "날씨정보를 확인할수없습니다";
+      return;
+    }
+    const ncstItems = data.response.body.items.item;
+    if (!Array.isArray(ncstItems) || ncstItems.length === 0) {
+      weatherError.value = "날씨정보를 확인할수없습니다";
+      return;
+    }
+
+    const ncst: Record<string, string> = {};
+    ncstItems.forEach((i: any) => {
+      ncst[i.category] = i.obsrValue;
+    });
+
+    weatherList.value = convertWeatherToObject(ncst);
+
+    const { fctBaseDate, fctBaseTime } = getFcstBaseTime();
+    const fcstData = await getUltraSrtFcst(lat, lng, fctBaseDate, fctBaseTime);
+    if (fcstData.response.header.resultCode !== "00") return;
+    const fcstItems = fcstData.response.body.items.item;
+    if (!Array.isArray(fcstItems) || fcstItems.length === 0) return;
+
+    const fcst: Record<string, string> = {};
+    fcstItems.forEach((item: any) => {
+      if (item.category === "SKY" || item.category === "LGT") {
+        if (!fcst[item.category] || item.fcstTime > (fcst as any)[item.category]?.fcstTime) {
+          fcst[item.category] = item.fcstValue;
+        }
+      }
+    });
+
+    weatherList.value = convertWeatherToObject(ncst, fcst);
+  } catch {
+    weatherError.value = "날씨정보를 확인할수없습니다";
+  } finally {
+    weatherLoading.value = false;
+  }
+};
+
 // @ts-ignore - Nuxt auto-import
 const router = useRouter();
 // @ts-ignore - Nuxt auto-import
@@ -126,15 +318,137 @@ const route = useRoute();
 // @ts-ignore - Nuxt auto-import
 const { $auth, $db } = useNuxtApp();
 
+const userRegions = ref<any[]>([]);
+/** 빈 문자열 = 현재 위치(users/GPS), 그 외 = 저장 지역 좌표로 표시 */
+const activeRegionKey = ref("");
+
+const userRegionKey = (e: any) => `${Number(e?.lat).toFixed(5)},${Number(e?.lng).toFixed(5)}`;
+
+const savedRegionOptionLabel = (e: any) => {
+  if (typeof e?.label === "string" && e.label.trim()) return e.label.trim();
+  if (typeof e?.lat === "number" && typeof e?.lng === "number") return `${Number(e.lat).toFixed(4)}, ${Number(e.lng).toFixed(4)}`;
+  return "-";
+};
+
+const savedAtMs = (v: any): number => {
+  if (!v) return 0;
+  // Firestore Timestamp (has toDate)
+  if (typeof v?.toDate === "function") {
+    try {
+      const d = v.toDate();
+      const ms = d instanceof Date ? d.getTime() : 0;
+      return Number.isFinite(ms) ? ms : 0;
+    } catch {
+      return 0;
+    }
+  }
+  // Date / number / ISO string
+  const d = v instanceof Date ? v : new Date(v);
+  const ms = d instanceof Date ? d.getTime() : 0;
+  return Number.isFinite(ms) ? ms : 0;
+};
+
+const pickLatestRegionKey = (list: any[]): string => {
+  if (!Array.isArray(list) || !list.length) return "";
+  let best: any = null;
+  let bestMs = -1;
+  for (const e of list) {
+    if (typeof e?.lat !== "number" || typeof e?.lng !== "number") continue;
+    const ms = savedAtMs(e.savedAt);
+    if (ms > bestMs) {
+      bestMs = ms;
+      best = e;
+    }
+  }
+  return best ? userRegionKey(best) : "";
+};
+
+const homeRegionOptions = computed(() => {
+  if (isLoggedIn.value !== true) return undefined;
+  const list = Array.isArray(userRegions.value) ? [...userRegions.value] : [];
+  if (!list.length) return undefined;
+  // 최신 저장 지역이 상단에 오도록 정렬
+  list.sort((a, b) => savedAtMs(b?.savedAt) - savedAtMs(a?.savedAt));
+  return list.map((e) => ({ key: userRegionKey(e), label: savedRegionOptionLabel(e) }));
+});
+
+const openHomeRegionPicker = () => {
+  if (locationError.value) return;
+  if (!homeRegionOptions.value || homeRegionOptions.value.length === 0) return;
+  isHomeRegionPickerOpen.value = true;
+};
+
+const closeHomeRegionPicker = () => {
+  isHomeRegionPickerOpen.value = false;
+};
+
+const selectHomeRegion = async (key: string) => {
+  closeHomeRegionPicker();
+  await onHomeRegionChange(key ?? "");
+};
+
+const weatherLocationLabelOverride = computed(() => {
+  if (activeRegionKey.value === "") return "";
+  const list = Array.isArray(userRegions.value) ? userRegions.value : [];
+  const e = list.find((r) => userRegionKey(r) === activeRegionKey.value);
+  if (!e) return "";
+  return savedRegionOptionLabel(e);
+});
+
+const restoreLivePosition = async () => {
+  const user = $auth.currentUser;
+  if (user) {
+    try {
+      const snap = await getDoc(doc($db, "users", user.uid));
+      if (snap.exists()) {
+        const data: any = snap.data();
+        if (typeof data.lat === "number" && typeof data.lng === "number") {
+          position.value = { lat: data.lat, lng: data.lng };
+          hasSavedLocation.value = true;
+          locationError.value = "";
+          return;
+        }
+      }
+    } catch {
+      // ignore and fall back to GPS
+    }
+  }
+
+  try {
+    const coords = await getCurrentLocation();
+    position.value = { lat: coords.lat, lng: coords.lng };
+    hasSavedLocation.value = false;
+    locationError.value = "";
+  } catch {
+    locationError.value = "위치 권한이 거부되었거나 위치를 가져올 수 없습니다.";
+  }
+};
+
+const onHomeRegionChange = async (key: string) => {
+  activeRegionKey.value = typeof key === "string" ? key : "";
+  if (activeRegionKey.value === "") {
+    await restoreLivePosition();
+    return;
+  }
+  const list = Array.isArray(userRegions.value) ? userRegions.value : [];
+  const e = list.find((r) => userRegionKey(r) === activeRegionKey.value);
+  if (e && typeof e.lat === "number" && typeof e.lng === "number") {
+    position.value = { lat: e.lat, lng: e.lng };
+    locationError.value = "";
+  }
+};
+
 const handlePositionUpdate = async (lat: number, lng: number) => {
   position.value = { lat, lng };
   const user = $auth.currentUser;
   if (!user) return;
+  if (activeRegionKey.value !== "") return;
   if (typeof lat !== "number" || typeof lng !== "number") return;
   if (lat === 0 && lng === 0) return;
   try {
     const token = localStorage.getItem("fcmToken") || "";
     await saveUser(user, token, { lat, lng });
+    await loadUserRegions(user.uid);
   } catch (e) {
     console.error("위치·userRegions 저장 실패:", e);
   }
@@ -182,6 +496,7 @@ const loadAirQuality = async () => {
 watch(
   position,
   () => {
+    loadWeather();
     loadAirQuality();
   },
   { deep: true }
@@ -274,6 +589,10 @@ const handleGoogleLogin = async () => {
   }
 };
 
+const goToAccount = () => {
+  router.push("/account");
+};
+
 const openConsentModal = () => {
   isConsentModalOpen.value = true;
 };
@@ -289,6 +608,7 @@ const confirmConsentAndLogin = async () => {
 
 const refreshLocation = async () => {
   try {
+    activeRegionKey.value = "";
     const coords = await getCurrentLocation();
     position.value = { lat: coords.lat, lng: coords.lng };
     locationError.value = "";
@@ -300,6 +620,7 @@ const refreshLocation = async () => {
       const token = localStorage.getItem("fcmToken") || "";
       if (token) {
         await saveUser(user, token, { lat: coords.lat, lng: coords.lng });
+        await loadUserRegions(user.uid);
       }
     }
   } catch {
@@ -318,6 +639,8 @@ onMounted(() => {
       userName.value = "";
       isPushEnabled.value = false;
       syncedFcmUid.value = null;
+      userRegions.value = [];
+      activeRegionKey.value = "";
       // 비로그인: 여기서 한 번만 현재 위치를 가져온다.
       try {
         const coords = await getCurrentLocation();
@@ -334,12 +657,24 @@ onMounted(() => {
 
     const ref = doc($db, "users", user.uid);
     const snap = await getDoc(ref);
+    await loadUserRegions(user.uid);
+    // 기본값: savedAt 최신 저장 지역 (없으면 현재 위치)
+    {
+      const latestKey = pickLatestRegionKey(userRegions.value);
+      activeRegionKey.value = latestKey;
+      if (latestKey) {
+        await onHomeRegionChange(latestKey);
+      }
+    }
     if (snap.exists()) {
       const data: any = snap.data();
       userName.value = data?.name ?? user.displayName ?? "";
       if (typeof data.lat === "number" && typeof data.lng === "number") {
-        position.value = { lat: data.lat, lng: data.lng };
-        hasSavedLocation.value = true;
+        // 저장 지역을 기본으로 쓰는 경우엔 users 좌표로 덮어쓰지 않는다.
+        if (!activeRegionKey.value) {
+          position.value = { lat: data.lat, lng: data.lng };
+          hasSavedLocation.value = true;
+        }
       }
       isPushEnabled.value = data.isPush === true;
 
@@ -399,12 +734,6 @@ const startAlarm = async () => {
   padding: 24px;
   box-sizing: border-box;
   position: relative;
-}
-
-.header-section {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
 }
 
 .gps-refresh-btn {
@@ -588,7 +917,7 @@ const startAlarm = async () => {
 .air-metric {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: 8px 10px;
 }
 
@@ -747,6 +1076,38 @@ const startAlarm = async () => {
 }
 
 .header-login-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.header-logout-btn {
+  width: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: none;
+  border-radius: 999px;
+  background: #ffebeb;
+  color: #b91c1c;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(255, 0, 0, 0.12);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.header-logout-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 0, 0, 0.18);
+}
+
+.header-logout-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.header-logout-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }

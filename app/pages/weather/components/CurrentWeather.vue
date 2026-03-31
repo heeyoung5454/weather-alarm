@@ -3,12 +3,17 @@
     :loading="isLoading"
     :error-overlay-text="displayLocationError || ''"
     :location-text="locationText"
+    :location-label="regionValue === '' ? '현재 위치' : '내 지역'"
+    :region-select-label="regionSelectLabel"
+    :region-options="regionOptions"
+    :region-value="regionValue"
     :now-date="nowDate"
     :now-time="nowTime"
     :icon-class="getWeatherIcon(weatherList?.sky?.value)"
     :weather-text="weatherError || weatherList?.sky?.text || ''"
     :temperature-text="weatherList?.t1h?.value ? weatherList?.t1h?.value + '°C' : ''"
     @refresh-location="emit('refresh-location')"
+    @change-region="emit('change:region', $event)"
   />
 </template>
 
@@ -22,6 +27,14 @@ import WeatherSummaryCard from "../../../components/WeatherSummaryCard.vue";
 const props = defineProps<{
   initialLat?: number;
   initialLng?: number;
+  /** 저장 지역 모드일 때 카드에 표시할 지역명(드롭다운 라벨과 동일). 없으면 역지오코딩 표시 */
+  locationLabelOverride?: string;
+  /** weather-card 내부 '내 지역' 드롭다운 옵션 */
+  regionOptions?: { key: string; label: string }[];
+  /** 드롭다운 선택값(빈 문자열=현재 위치) */
+  regionValue?: string;
+  /** 드롭다운 라벨 */
+  regionSelectLabel?: string;
   useSavedLocation?: boolean;
   locationError?: string; // 상위에서 내려주는 위치 에러 메시지
 }>();
@@ -30,7 +43,12 @@ const emit = defineEmits<{
   (e: "update:position", lat: number, lng: number): void;
   (e: "update:location-error", error: string): void;
   (e: "refresh-location"): void;
+  (e: "change:region", key: string): void;
 }>();
+
+const regionOptions = computed(() => props.regionOptions);
+const regionValue = computed(() => props.regionValue ?? "");
+const regionSelectLabel = computed(() => props.regionSelectLabel ?? "내 지역");
 
 // 하늘 상태 코드로 아이콘 클래스를 매핑한다.
 const getWeatherIcon = (sky: string) => {
@@ -64,20 +82,31 @@ const position = ref({
 const displayLocationError = computed(() => props.locationError || internalLocationError.value);
 
 const applyCoords = async (lat: number, lng: number) => {
+  const prevLat = position.value.lat;
+  const prevLng = position.value.lng;
+  const coordsUnchanged = typeof prevLat === "number" && typeof prevLng === "number" && prevLat === lat && prevLng === lng && !(prevLat === 0 && prevLng === 0);
+
   position.value = { lat, lng };
   internalLocationError.value = "";
   emit("update:position", lat, lng);
   emit("update:location-error", "");
 
-  try {
-    const region = await getRegionName(lat, lng);
-    const line = formatKoreanAddressLine(region);
-    if (line) locationText.value = line;
-  } catch {
-    // 주소 변환 실패 시 기존 텍스트 유지
+  const override = typeof props.locationLabelOverride === "string" ? props.locationLabelOverride.trim() : "";
+  if (override) {
+    locationText.value = override;
+  } else {
+    try {
+      const region = await getRegionName(lat, lng);
+      const line = formatKoreanAddressLine(region);
+      if (line) locationText.value = line;
+    } catch {
+      // 주소 변환 실패 시 기존 텍스트 유지
+    }
   }
 
-  fetchWeather(lat, lng);
+  if (!coordsUnchanged) {
+    fetchWeather(lat, lng);
+  }
 };
 
 // 기상청 API 응답을 받아 현재 카드에 필요한 형태로 변환한다.
@@ -184,7 +213,7 @@ const convertWeatherToObject = (ncstData: Record<string, string>, fcstData?: Rec
 };
 
 watch(
-  () => [props.initialLat, props.initialLng] as const,
+  () => [props.initialLat, props.initialLng, props.locationLabelOverride] as const,
   async ([lat, lng]) => {
     if (typeof lat === "number" && typeof lng === "number" && lat !== 0 && lng !== 0) {
       await applyCoords(lat, lng);
@@ -304,12 +333,6 @@ onMounted(() => {
   margin: 8px 0 0;
   font-size: 12px;
   color: #b34141;
-}
-
-.now-time {
-  margin: 4px 0 0;
-  font-size: 11px;
-  color: #6b8399;
 }
 
 .weather-icon {

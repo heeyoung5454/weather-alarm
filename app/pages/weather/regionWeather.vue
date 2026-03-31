@@ -71,7 +71,7 @@ import { useRegions } from "../../composables/useRegions";
 import { fetchAirQualityByCoords, type AirQualitySummary } from "../../composables/useAirQuality";
 import HourlyWeatherSection from "../../components/HourlyWeatherSection.vue";
 import WeatherSummaryCard from "../../components/WeatherSummaryCard.vue";
-import WeeklyWeather from "../weather/components/WeeklyWeather.vue";
+import WeeklyWeather from "./components/WeeklyWeather.vue";
 
 const route = useRoute();
 const { regionsByName, fetchRegions } = useRegions();
@@ -87,7 +87,7 @@ const regionCoords = computed(() => {
   if (typeof latQ === "string" && typeof lngQ === "string") {
     const lat = parseFloat(latQ);
     const lng = parseFloat(lngQ);
-    if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+    if (Number.isFinite(lat) && lat >= -90 && lat <= 90 && Number.isFinite(lng) && lng >= -180 && lng <= 180) {
       return { lat, lon: lng };
     }
   }
@@ -162,18 +162,13 @@ const PTYMap: Record<string, string> = {
 };
 
 const getWeatherIcon = (sky?: string, pty?: string) => {
-  // 1. 강수형태(PTY)가 있으면 비/눈 아이콘 우선
   if (pty && pty !== "0") {
-    // 비, 비/눈, 빗방울 계열은 비 아이콘
     if (pty === "1" || pty === "2" || pty === "5" || pty === "6") return "icon-rainy";
-    // 눈 계열
     if (pty === "3" || pty === "7") return "icon-snow";
   }
-
-  // 2. PTY 없으면 하늘 상태(SKY) 기준
   if (sky === "1") return "icon-sunny";
-  if (sky === "3") return "icon-suncloudy"; // 구름많음
-  if (sky === "4") return "icon-cloudy"; // 흐림
+  if (sky === "3") return "icon-suncloudy";
+  if (sky === "4") return "icon-cloudy";
   return "unknown";
 };
 
@@ -265,7 +260,7 @@ watch(
       airError.value = "";
     }
   },
-  { deep: true }
+  { deep: true },
 );
 </script>
 
@@ -429,3 +424,4 @@ watch(
   gap: 24px;
 }
 </style>
+

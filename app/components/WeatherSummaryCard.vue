@@ -9,25 +9,33 @@
       {{ errorOverlayText }}
     </div>
 
-    <!--
-      errorOverlayText가 있어도 gps 아이콘만 보이게 하기
-      (텍스트/날씨 영역은 기존처럼 에러일 때 숨김)
-    -->
-    <div v-if="errorOverlayText || locationText" class="location-row">
-      <button
-        type="button"
-        class="gps-icon"
-        aria-label="현재 위치 업데이트"
-        @click="$emit('refresh-location')"
-      ></button>
-      <p class="location-text">{{ errorOverlayText ? '현재 위치 업데이트 ' : locationText }}</p>
-    </div>
-
     <template v-if="!errorOverlayText">
-      <p class="now-time">{{ nowDate }} {{ nowTime }} 기준</p>
-      <div class="weather-icon" :class="iconClass" aria-hidden="true"></div>
-      <p class="weather-text">{{ weatherText }}</p>
-      <p class="temperature">{{ temperatureText }}</p>
+      <div class="card-top">
+        <div
+          v-if="locationText"
+          class="location-row"
+          :class="{ interactive: interactive !== false }"
+          :role="interactive !== false ? 'button' : undefined"
+          :tabindex="interactive !== false ? 0 : undefined"
+          :aria-label="interactive !== false ? '내 지역 선택 열기' : undefined"
+          @click="interactive !== false ? emit('open-region-picker') : undefined"
+          @keydown.enter.prevent="interactive !== false ? emit('open-region-picker') : undefined"
+          @keydown.space.prevent="interactive !== false ? emit('open-region-picker') : undefined"
+        >
+          <button type="button" class="gps-icon" aria-label="현재 위치 업데이트" :disabled="interactive === false" @click.stop="interactive !== false ? emit('refresh-location') : undefined"></button>
+          <p class="location-text">
+            <span class="location-label">{{ locationLabel }}</span>
+            <span class="location-value">{{ locationText }}</span>
+            <span class="now-time">{{ nowDate }} {{ nowTime }} 기준</span>
+          </p>
+        </div>
+      </div>
+
+      <div class="card-content">
+        <div class="weather-icon" :class="iconClass" aria-hidden="true"></div>
+        <p class="weather-text">{{ weatherText }}</p>
+        <p class="temperature">{{ temperatureText }}</p>
+      </div>
     </template>
   </section>
 </template>
@@ -44,6 +52,10 @@ withDefaults(
     loadingText?: string;
     errorOverlayText?: string;
     locationText?: string;
+    locationLabel?: string;
+    interactive?: boolean;
+    regionOptions?: { key: string; label: string }[];
+    regionValue?: string;
   }>(),
   {
     iconClass: "unknown",
@@ -53,11 +65,17 @@ withDefaults(
     loadingText: "날씨 정보를 불러오는 중...",
     errorOverlayText: "",
     locationText: "",
+    locationLabel: "현재 위치",
+    interactive: true,
+    regionOptions: undefined,
+    regionValue: "",
   }
 );
 
-defineEmits<{
+const emit = defineEmits<{
   (e: "refresh-location"): void;
+  (e: "change-region", key: string): void;
+  (e: "open-region-picker"): void;
 }>();
 </script>
 
@@ -73,6 +91,97 @@ defineEmits<{
   position: relative;
   box-sizing: border-box;
   min-height: 332px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.card-top {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  text-align: left;
+}
+
+.card-content {
+  width: 100%;
+  text-align: center;
+}
+
+.location-row {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(23, 68, 109, 0.14);
+  background: transparent;
+  transition:
+    transform 0.15s ease,
+    background 0.15s ease;
+}
+
+.location-row.interactive {
+  cursor: pointer;
+}
+
+.location-row.interactive:hover {
+  transform: translateY(-1px);
+  background: rgba(232, 244, 255, 0.82);
+}
+
+.location-row.interactive:focus-visible {
+  outline: 3px solid rgba(44, 131, 201, 0.28);
+  outline-offset: 2px;
+}
+
+.gps-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 68, 109, 0.16);
+  background: rgba(232, 244, 255, 0.85) url("@/assets/icon/gps.png") no-repeat center center / 18px 18px;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition:
+    transform 0.15s ease,
+    background 0.15s ease;
+}
+
+.gps-icon:hover {
+  transform: translateY(-1px);
+  background: rgba(232, 244, 255, 1) url("@/assets/icon/gps.png") no-repeat center center / 18px 18px;
+}
+
+.gps-icon:active {
+  transform: translateY(0);
+}
+
+.location-text {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.location-label {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: -0.2px;
+  color: rgba(23, 68, 109, 0.7);
+}
+
+.location-value {
+  font-size: 13px;
+  font-weight: 800;
+  color: #17446d;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .loading-overlay {
@@ -130,69 +239,16 @@ defineEmits<{
   box-sizing: border-box;
 }
 
-.location-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #17446d;
-  font-weight: 600;
-  position: relative;
-  z-index: 6; /* location-error-full(기본 z-index: 5) 위로 아이콘 노출 */
-}
-
-.gps-icon {
-  appearance: none;
-  border: 2px solid #2c83c9;
-  background: transparent;
-  position: relative;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  box-sizing: border-box;
-  cursor: pointer;
-}
-
-.gps-icon:disabled {
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-
-.gps-icon::before,
-.gps-icon::after {
-  content: "";
-  position: absolute;
-  background: #2c83c9;
-}
-
-.gps-icon::before {
-  width: 2px;
-  height: 24px;
-  top: -5px;
-  left: 6px;
-}
-
-.gps-icon::after {
-  width: 24px;
-  height: 2px;
-  top: 6px;
-  left: -5px;
-}
-
-.location-text {
-  margin: 0;
-  font-size: 14px;
-  color: #17446d;
-  font-weight: 600;
-}
+/* (moved to top styles: pill UI for location row) */
 
 .now-time {
-  margin: 8px 0 16px;
-  font-size: 12px;
+  font-size: 11px;
   color: #6b8399;
+  display: block;
 }
 
 .weather-icon {
-  margin: 0 auto 16px;
+  margin: 0 auto 12px;
   width: 104px;
   height: 104px;
 }

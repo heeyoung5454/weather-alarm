@@ -1,99 +1,22 @@
 <template>
   <main class="account-page">
     <div class="page-content">
-      <div class="card">
-        <div v-if="isLoggedIn === true" class="content">
-          <p class="row">
-            <span class="label">이메일</span>
-            <span class="value">{{ userEmail }}</span>
-          </p>
-          <p class="row">
-            <span class="label">이름</span>
-            <span class="value">{{ userName }}</span>
-          </p>
+      <div v-if="isLoggedIn === true" class="account-stack">
+        <UserInfoPanel :email="userEmail" :name="userName" />
+        <RegionsPanel :items="regionPanelItems" :disabled="panelDisabled" @remove="openDeleteRegionDialogByKey" />
+        <DevicesPanel :items="devicePanelItems" :disabled="panelDisabled" @remove="openDeleteDeviceDialog" @toggle="toggleDevicePush" />
+        <AccountActionsPanel :disabled="panelDisabled" @logout="handleLogout" @withdraw="openWithdrawDialog" />
+      </div>
 
-          <div class="regions-section">
-            <p class="section-title">등록 지역</p>
-            <p class="hint" v-if="userRegions.length === 0">저장된 지역이 없습니다. 홈에서 위치를 허용하면 저장됩니다.</p>
-            <ul v-else class="regions-list">
-              <li v-for="r in sortedUserRegions" :key="regionEntryKey(r)" class="region-item">
-                <span class="region-address">{{ regionDisplayLine(r) }}</span>
-                <div class="region-actions">
-                  <span class="region-saved">{{ formatRegionSavedAt(r.savedAt) }}</span>
-                  <button
-                    type="button"
-                    class="region-remove-btn"
-                    :disabled="logoutLoading || withdrawLoading || deleteDeviceLoading || deleteRegionLoading"
-                    aria-label="이 지역 삭제"
-                    @click="openDeleteRegionDialog(r)"
-                  >
-                    <svg class="region-remove-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                      <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-                    </svg>
-                  </button>
-                </div>
-              </li>
-            </ul>
-          </div>
-
-          <div class="tokens-section">
-            <p class="section-title">등록 디바이스</p>
-            <p class="hint" v-if="fcmTokenEntries.length === 0">등록된 디바이스가 없습니다.</p>
-
-            <div v-else class="tokens-list">
-              <div v-for="(t, idx) in displayedTokenEntries" :key="getToken(t) + '_' + idx" class="token-item" :class="{ current: getToken(t) === currentToken }">
-                <span v-if="getToken(t) === currentToken" class="token-badge">현재 디바이스</span>
-                <button
-                  type="button"
-                  class="token-remove-btn"
-                  :disabled="logoutLoading || withdrawLoading || deleteDeviceLoading || deleteRegionLoading"
-                  aria-label="이 디바이스 삭제"
-                  @click="openDeleteDeviceDialog(getToken(t))"
-                >
-                  <svg class="token-remove-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                    <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  class="device-toggle-btn"
-                  :class="{ on: getEnabled(t) !== false }"
-                  :disabled="logoutLoading || deleteDeviceLoading || deleteRegionLoading"
-                  @click="toggleDevicePush(getToken(t), !(getEnabled(t) !== false))"
-                >
-                  {{ getEnabled(t) !== false ? "알림 ON" : "알림 OFF" }}
-                </button>
-                <span class="token-index">{{ idx + 1 }}</span>
-                <div class="token-main">
-                  <div class="token-meta">
-                    <p class="meta-line">
-                      <span class="meta-key">앱 정보</span><span class="meta-val">{{ getAppVersion(t) || "-" }}</span>
-                    </p>
-                    <p class="meta-line">
-                      <span class="meta-key">플랫폼</span><span class="meta-val">{{ getPlatform(t) || "-" }}</span>
-                    </p>
-                    <p class="meta-line">
-                      <span class="meta-key">userAgent</span><span class="meta-val">{{ getUserAgent(t) || "-" }}</span>
-                    </p>
-                    <p class="meta-line">
-                      <span class="meta-key">화면</span><span class="meta-val">{{ getScreenText(t) || "-" }}</span>
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <button type="button" class="logout-btn" :disabled="logoutLoading || withdrawLoading || deleteDeviceLoading || deleteRegionLoading" @click="handleLogout">로그아웃</button>
-          <button type="button" class="withdraw-link" :disabled="withdrawLoading || deleteDeviceLoading || deleteRegionLoading" @click="openWithdrawDialog">회원탈퇴</button>
-        </div>
-
-        <div v-else-if="isLoggedIn === false" class="content">
+      <div v-else-if="isLoggedIn === false" class="panel">
+        <div class="panel-body">
           <p class="hint">로그인이 필요합니다.</p>
           <button type="button" class="back-btn" :disabled="logoutLoading" @click="router.push('/')">홈으로</button>
         </div>
+      </div>
 
-        <div v-else class="content">
+      <div v-else class="panel">
+        <div class="panel-body">
           <p class="hint">계정 정보를 불러오는 중...</p>
         </div>
       </div>
@@ -137,6 +60,10 @@ import { collection, deleteDoc, doc, getDoc, getDocs, query, updateDoc, where } 
 import { deleteUser, onAuthStateChanged, signOut } from "firebase/auth";
 import ConfirmDialog from "../../components/ConfirmDialog.vue";
 import { formatKoreanAddressLine, getRegionName } from "../../utils/reverseGeo";
+import UserInfoPanel from "./components/UserInfoPanel.vue";
+import RegionsPanel from "./components/RegionsPanel.vue";
+import DevicesPanel from "./components/DevicesPanel.vue";
+import AccountActionsPanel from "./components/AccountActionsPanel.vue";
 
 // @ts-ignore - Nuxt auto-import
 const router = useRouter();
@@ -160,6 +87,8 @@ const userRegions = ref<any[]>([]);
 const regionLabelByKey = ref<Record<string, string>>({});
 const regionAddressLoading = ref(false);
 const currentToken = ref("");
+
+const panelDisabled = computed(() => logoutLoading.value || withdrawLoading.value || deleteDeviceLoading.value || deleteRegionLoading.value);
 
 const regionCoordKey = (r: any): string => {
   if (typeof r?.lat !== "number" || typeof r?.lng !== "number") return "";
@@ -218,6 +147,27 @@ const displayedTokenEntries = computed(() => {
   return [...current, ...rest];
 });
 
+const regionPanelItems = computed(() =>
+  (sortedUserRegions.value ?? []).map((r: any) => ({
+    key: regionEntryKey(r),
+    address: regionDisplayLine(r),
+    savedText: formatRegionSavedAt(r?.savedAt),
+  }))
+);
+
+const devicePanelItems = computed(() =>
+  (displayedTokenEntries.value ?? []).map((t: any, idx: number) => ({
+    idx,
+    token: getToken(t),
+    enabled: getEnabled(t) !== false,
+    isCurrent: getToken(t) === currentToken.value,
+    appVersion: getAppVersion(t) || "",
+    platform: getPlatform(t) || "",
+    userAgent: getUserAgent(t) || "",
+    screenText: getScreenText(t) || "",
+  }))
+);
+
 const regionSavedMs = (v: any): number => {
   if (v == null) return 0;
   if (typeof v.toDate === "function") return v.toDate().getTime();
@@ -229,6 +179,12 @@ const regionSavedMs = (v: any): number => {
 const regionEntryKey = (r: any): string => {
   const k = regionCoordKey(r);
   return `${k}|${regionSavedMs(r?.savedAt)}`;
+};
+
+const openDeleteRegionDialogByKey = (key: string) => {
+  const r = (sortedUserRegions.value ?? []).find((e: any) => regionEntryKey(e) === key);
+  if (!r) return;
+  openDeleteRegionDialog(r);
 };
 
 const sortedUserRegions = computed(() => {
@@ -534,7 +490,7 @@ onMounted(() => {
 });
 </script>
 
-<style scoped>
+<style>
 .account-page {
   min-height: calc(100vh - 164px);
   background: linear-gradient(180deg, #8ed0ff 0%, #d9f0ff 50%, #f6fbff 100%);
@@ -551,17 +507,37 @@ onMounted(() => {
   gap: 24px;
 }
 
-.card {
+.account-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.panel {
   width: 100%;
-  max-width: 480px;
   background: #ffffffd9;
   backdrop-filter: blur(4px);
   border-radius: 24px;
   box-shadow: 0 12px 30px rgba(29, 76, 122, 0.2);
-  padding: 22px 18px;
 }
 
-.content {
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px 10px;
+  border-bottom: 1px solid rgba(23, 68, 109, 0.14);
+}
+
+.panel-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 900;
+  color: #17446d;
+}
+
+.panel-body {
+  padding: 14px 18px 18px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -599,8 +575,15 @@ onMounted(() => {
   color: #4c6f8f;
 }
 
+.actions-panel .panel-body {
+  gap: 10px;
+}
+
+.actions-body {
+  align-items: stretch;
+}
+
 .logout-btn {
-  margin-top: 6px;
   padding: 12px 14px;
   border-radius: 999px;
   border: none;
@@ -628,8 +611,6 @@ onMounted(() => {
 }
 
 .withdraw-link {
-  align-self: flex-end;
-  margin-top: 10px;
   padding: 0;
   border: none;
   background: none;
@@ -648,13 +629,6 @@ onMounted(() => {
 .withdraw-link:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.regions-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 8px 0 4px;
 }
 
 .regions-list {
@@ -730,20 +704,6 @@ onMounted(() => {
   height: 14px;
 }
 
-.tokens-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 8px 0 4px;
-}
-
-.section-title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 900;
-  color: #17446d;
-}
-
 .tokens-list {
   display: flex;
   flex-direction: column;
@@ -754,7 +714,7 @@ onMounted(() => {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 10px 12px 10px 40px;
+  padding: 10px 40px 10px 12px;
   border-radius: 16px;
   background: #ffffffcc;
   border: 1px solid #d8e7f3;
@@ -762,7 +722,6 @@ onMounted(() => {
 }
 
 .token-item.current {
-  border: 2px solid #2c83c9;
   background: #f0fbff;
   box-shadow: 0 8px 24px rgba(44, 131, 201, 0.18);
 }
@@ -790,12 +749,12 @@ onMounted(() => {
   color: #b91c1c;
 }
 
-/* 배지는 우측 상단 유지 — X는 좌측 상단에 두어 겹침 방지 */
+/* X 버튼은 우측 상단 */
 .token-remove-btn {
   position: absolute;
   top: 8px;
-  left: 8px;
-  right: auto;
+  left: auto;
+  right: 8px;
   z-index: 2;
   width: 28px;
   height: 28px;
@@ -834,34 +793,6 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.token-badge {
-  flex: 0 0 auto;
-  font-size: 12px;
-  font-weight: 900;
-  color: #17446d;
-  background: #d9f0ff;
-  padding: 4px 8px;
-  border-radius: 999px;
-  margin-top: -40px;
-}
-
-.token-item.current .token-badge {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  flex: none;
-  background: #17446d;
-  color: white;
-}
-
-.token-index {
-  flex: 0 0 auto;
-  font-size: 12px;
-  font-weight: 800;
-  color: #4b5b6a;
-  padding-top: 2px;
 }
 
 .token-meta {
