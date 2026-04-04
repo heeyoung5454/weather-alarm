@@ -23,6 +23,7 @@ npm run dev
 - Frontend: `Nuxt 4`, `Vue 3`, `TypeScript`
 - Backend/Infra: `Firebase` (Auth, Firestore, Cloud Functions, Cloud Messaging)
 - Weather API: 공공데이터포털 기상청 예보 API (`VilageFcstInfoService_2.0`)
+- 미세먼지 정보 : 공공데이터 포털 한국환경공단\_대기오염정보 API (`ArpltnInforInqireSvc`)
 
 ## 핵심 기능
 

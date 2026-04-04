@@ -7,7 +7,13 @@
       ·
       <a href="mailto:heeyoung5454@gmail.com">Email</a>
     </p>
-    <p class="line-4">공공데이터포털 기상청 예보 API 사용 (VilageFcstInfoService_2.0)</p>
+    <div class="data-used">
+      <div>데이터 출처</div>
+      <ul>
+        <li>공공데이터포털 기상청 단기 예보</li>
+        <li>공공데이터포털 한국환경공단_대기오염정보</li>
+      </ul>
+    </div>
   </footer>
 </template>
 
@@ -35,8 +41,7 @@
 }
 
 .line-2,
-.line-3,
-.line-4 {
+.line-3 {
   margin-top: 2px;
 }
 
@@ -44,6 +49,19 @@
   color: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.data-used {
+  margin-top: 12px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(23, 68, 109, 0.18);
+
+  ul {
+    padding-left: 15px;
+    li {
+      padding: 0;
+    }
+  }
 }
 
 @media (max-width: 768px) {
