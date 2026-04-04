@@ -59,7 +59,8 @@ const getDeviceMeta = (): DeviceMeta => {
   };
 };
 
-const normalizeFcmTokens = (raw: any): FcmTokenEntry[] => {
+/** users.fcmTokens 배열을 UI/저장 공통 형식으로 맞춤 (문자열 배열 등) */
+export const normalizeFcmTokens = (raw: any): FcmTokenEntry[] => {
   if (!Array.isArray(raw)) return [];
 
   const out: FcmTokenEntry[] = [];

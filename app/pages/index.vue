@@ -1,9 +1,14 @@
 <template>
   <main class="page">
     <div class="page-content">
+      <div class="home-top-bar" v-if="isLoggedIn === false">
+        <button type="button" class="home-login-btn" :disabled="loginLoading" @click="openConsentModal">로그인</button>
+      </div>
+
       <WeatherSummaryCard
         :loading="weatherLoading"
         :error-overlay-text="locationError || ''"
+        :weather-error-text="weatherError || ''"
         :location-text="weatherLocationText"
         :location-label="homeLocationLabel"
         :region-options="homeRegionOptions"
@@ -19,28 +24,7 @@
 
       <RegionPickerModal :open="isHomeRegionPickerOpen" title="내 지역" :options="homeRegionOptions || []" :value="activeRegionKey" @close="closeHomeRegionPicker" @select="selectHomeRegion" />
 
-      <div v-if="hasAirKoreaKey" class="air-quality-card">
-        <p class="air-quality-head">{{ airSummary?.sido ?? "—" }}</p>
-        <div v-if="airLoading" class="air-quality-loading">불러오는 중…</div>
-        <template v-else-if="airSummary && !airError">
-          <p v-if="airSummary.pm10 == null && airSummary.pm25 == null" class="air-empty-hint">측정값이 없거나 아직 갱신되지 않았습니다.</p>
-          <div class="air-quality-metrics">
-            <div class="air-metric">
-              <span class="air-label">미세먼지</span>
-              <strong class="air-value">{{ airSummary.pm10 != null ? `${airSummary.pm10}` : "—" }}</strong>
-              <span class="air-unit">㎍/㎥</span>
-              <span v-if="airSummary.gradePm10" class="air-grade" :class="gradeClass(airSummary.pm10, 'pm10')">{{ airSummary.gradePm10 }}</span>
-            </div>
-            <div class="air-metric">
-              <span class="air-label">초미세먼지</span>
-              <strong class="air-value">{{ airSummary.pm25 != null ? `${airSummary.pm25}` : "—" }}</strong>
-              <span class="air-unit">㎍/㎥</span>
-              <span v-if="airSummary.gradePm25" class="air-grade" :class="gradeClass(airSummary.pm25, 'pm25')">{{ airSummary.gradePm25 }}</span>
-            </div>
-          </div>
-        </template>
-        <p v-else-if="airError" class="air-error">{{ airError }}</p>
-      </div>
+      <AirQualityCard v-if="hasAirKoreaKey" :loading="airLoading" :error-message="airError" :summary="airSummary" />
 
       <div class="push-toggle-wrap">
         <div class="push-toggle-row">
@@ -57,7 +41,7 @@
       <HourlyWeatherSection :lat="position.lat" :lng="position.lng" />
 
       <!-- 주간 날씨 -->
-      <WeeklyWeather :lat="position.lat" :lng="position.lng" :location-error="locationError" />
+      <WeeklyWeather :lat="position.lat" :lng="position.lng" />
 
       <ToastMessage :message="toastMessage" :visible="toastVisible" />
 
@@ -72,6 +56,7 @@ import RegionPickerModal from "../components/RegionPickerModal.vue";
 import WeeklyWeather from "./weather/components/WeeklyWeather.vue";
 import ToastMessage from "../components/ToastMessage.vue";
 import InfoTooltip from "../components/InfoTooltip.vue";
+import AirQualityCard from "../components/AirQualityCard.vue";
 import HourlyWeatherSection from "../components/HourlyWeatherSection.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 
@@ -102,10 +87,21 @@ const isPushEnabled = ref(false);
 const pushToggleLoading = ref(false);
 const isLoggedIn = ref<boolean | null>(null);
 const syncedFcmUid = ref<string | null>(null);
-const loginLoading = ref(false);
 const userName = ref("");
-const isConsentModalOpen = ref(false);
 const isHomeRegionPickerOpen = ref(false);
+const isConsentModalOpen = ref(false);
+const loginLoading = ref(false);
+
+const consentMessage = `알림 서비스를 이용하기 위해 로그인이 필요합니다.
+
+로그인 시 아래 정보를 수집합니다:
+- 이메일 주소
+- 이름
+- 현재 위치 정보 (위도, 경도)
+- 등록된 위치 정보 (위도, 경도)
+
+수집된 정보는 알림 제공 및 서비스 운영에만 사용됩니다.
+회원탈퇴 시 해당 정보는 파기됩니다.`;
 
 const homeLocationLabel = computed(() => (activeRegionKey.value === "" ? "현재 위치" : "내 지역"));
 
@@ -175,18 +171,6 @@ onBeforeUnmount(() => {
   bodyScrollLock.unlock();
 });
 
-const consentMessage = `알림 서비스를 이용하기 위해 로그인이 필요합니다.
-
-로그인 시 아래 정보를 수집합니다:
-- 이메일 주소
-- 이름
-
-수집된 정보는 알림 제공 및 서비스 운영에만 사용됩니다.`;
-
-const handleLocationError = (error: string) => {
-  locationError.value = error;
-};
-
 // ---- weather (root-owned) ----
 const weatherLoading = ref(false);
 const weatherError = ref("");
@@ -220,7 +204,7 @@ const weatherIconClass = computed(() => {
 });
 
 const weatherText = computed(() => {
-  if (weatherError.value) return weatherError.value;
+  if (weatherError.value) return "";
   const pty = String(weatherList.value?.pty?.value ?? "");
   if (pty && pty !== "0") return weatherList.value?.pty?.text ?? "";
   return weatherList.value?.sky?.text ?? "";
@@ -272,12 +256,12 @@ const loadWeather = async () => {
 
     const data = await getUltraSrtNcst(lat, lng, baseDate, baseTime);
     if (data.response.header.resultCode !== "00") {
-      weatherError.value = "날씨정보를 확인할수없습니다";
+      weatherError.value = "날씨정보를 불러올 수 없습니다.";
       return;
     }
     const ncstItems = data.response.body.items.item;
     if (!Array.isArray(ncstItems) || ncstItems.length === 0) {
-      weatherError.value = "날씨정보를 확인할수없습니다";
+      weatherError.value = "날씨정보를 불러올 수 없습니다.";
       return;
     }
 
@@ -305,7 +289,7 @@ const loadWeather = async () => {
 
     weatherList.value = convertWeatherToObject(ncst, fcst);
   } catch {
-    weatherError.value = "날씨정보를 확인할수없습니다";
+    weatherError.value = "날씨정보를 불러올 수 없습니다.";
   } finally {
     weatherLoading.value = false;
   }
@@ -464,17 +448,6 @@ const airLoading = ref(false);
 const airError = ref("");
 const airSummary = ref<AirQualitySummary | null>(null);
 
-const gradeClass = (v: number | null, kind: "pm10" | "pm25") => {
-  if (v == null) return "";
-  const good = kind === "pm10" ? v <= 30 : v <= 15;
-  const mid = kind === "pm10" ? v <= 80 : v <= 35;
-  const bad = kind === "pm10" ? v <= 150 : v <= 75;
-  if (good) return "g-good";
-  if (mid) return "g-mid";
-  if (bad) return "g-bad";
-  return "g-verybad";
-};
-
 const loadAirQuality = async () => {
   if (!hasAirKoreaKey.value) return;
   const { lat, lng } = position.value;
@@ -484,10 +457,10 @@ const loadAirQuality = async () => {
   try {
     const r = await fetchAirQualityByCoords(lat, lng);
     airSummary.value = r;
-    if (!r) airError.value = "대기질 정보를 불러오지 못했습니다.";
+    if (!r) airError.value = "정보를 가져올 수 없습니다.";
   } catch {
     airSummary.value = null;
-    airError.value = "대기질 정보를 불러오지 못했습니다.";
+    airError.value = "정보를 가져올 수 없습니다.";
   } finally {
     airLoading.value = false;
   }
@@ -580,19 +553,6 @@ const togglePushSetting = async () => {
   }
 };
 
-const handleGoogleLogin = async () => {
-  try {
-    loginLoading.value = true;
-    await useGoogleLogin();
-  } finally {
-    loginLoading.value = false;
-  }
-};
-
-const goToAccount = () => {
-  router.push("/account");
-};
-
 const openConsentModal = () => {
   isConsentModalOpen.value = true;
 };
@@ -603,7 +563,12 @@ const closeConsentModal = () => {
 
 const confirmConsentAndLogin = async () => {
   closeConsentModal();
-  await handleGoogleLogin();
+  try {
+    loginLoading.value = true;
+    await useGoogleLogin();
+  } finally {
+    loginLoading.value = false;
+  }
 };
 
 const refreshLocation = async () => {
@@ -800,6 +765,40 @@ const startAlarm = async () => {
   gap: 24px;
 }
 
+.home-top-bar {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-height: 28px;
+  margin: -4px 0 0;
+}
+
+.home-login-btn {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 68, 109, 0.22);
+  background: rgba(255, 255, 255, 0.92);
+  color: #17446d;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(29, 76, 122, 0.1);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.home-login-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(29, 76, 122, 0.14);
+}
+
+.home-login-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .login-top {
   width: 100%;
   display: flex;
@@ -883,103 +882,6 @@ const startAlarm = async () => {
   font-size: 14px;
   font-weight: 600;
   color: #4c6f8f;
-}
-
-.air-quality-card {
-  width: 100%;
-  padding: 16px 18px;
-  border-radius: 20px;
-  background: #ffffffd9;
-  backdrop-filter: blur(4px);
-  box-shadow: 0 8px 22px rgba(29, 76, 122, 0.12);
-  box-sizing: border-box;
-}
-
-.air-quality-head {
-  margin: 0 0 12px;
-  font-size: 14px;
-  font-weight: 800;
-  color: #17446d;
-}
-
-.air-quality-loading {
-  margin: 0;
-  font-size: 13px;
-  color: #6b8399;
-}
-
-.air-quality-metrics {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.air-metric {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 10px;
-}
-
-.air-label {
-  font-size: 13px;
-  font-weight: 700;
-  color: #6b8399;
-  min-width: 110px;
-}
-
-.air-value {
-  font-size: 28px;
-  font-weight: 800;
-  color: #17446d;
-  letter-spacing: -0.02em;
-}
-
-.air-unit {
-  font-size: 12px;
-  font-weight: 600;
-  color: #8aa3b8;
-}
-
-.air-grade {
-  margin-left: auto;
-  font-size: 12px;
-  font-weight: 800;
-  padding: 4px 10px;
-  border-radius: 999px;
-}
-
-.air-grade.g-good {
-  background: #d9f0ff;
-  color: #17446d;
-}
-
-.air-grade.g-mid {
-  background: #fff3d4;
-  color: #7a5a00;
-}
-
-.air-grade.g-bad {
-  background: #ffe4d4;
-  color: #a14a00;
-}
-
-.air-grade.g-verybad {
-  background: #ffd9e0;
-  color: #9aa3b8;
-}
-
-.air-error {
-  margin: 0;
-  font-size: 13px;
-  color: #c45c5c;
-}
-
-.air-empty-hint {
-  margin: 0 0 10px;
-  font-size: 12px;
-  line-height: 1.45;
-  color: #6b8399;
 }
 
 .push-toggle-wrap {

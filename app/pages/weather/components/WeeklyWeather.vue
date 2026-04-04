@@ -3,18 +3,15 @@
     <h2 class="section-title">주간 날씨</h2>
 
     <div class="content-wrapper">
-      <!-- 로딩 오버레이 -->
       <div v-if="isLoading" class="loading-overlay">
         <div class="spinner"></div>
         <p class="loading-text">주간 예보를 불러오는 중...</p>
       </div>
 
-      <!-- 위치 에러 메시지 -->
-      <div v-if="props.locationError" class="error-message">
-        {{ props.locationError }}
-      </div>
+      <p v-else-if="locationError" class="weekly-error-text">위치 권한이 거부되었거나 위치를 가져올 수 없습니다.</p>
+      <p v-else-if="weatherError" class="weekly-error-text">날씨정보를 불러올 수 없습니다.</p>
 
-      <div v-if="!props.locationError" class="scroll-container">
+      <div v-else-if="weeklyWeather.length" class="scroll-container">
         <article v-for="day in weeklyWeather" :key="day.date" class="day-card">
           <p class="date">{{ formatDate(day.date) }}</p>
           <div class="day-icon" :class="getWeatherIconClass(day.sky)"></div>
@@ -39,19 +36,20 @@ import { groupByDate, summarizeDay } from "@/utils/forecast";
 const props = defineProps<{
   lat: number;
   lng: number;
-  locationError: string;
 }>();
 
 const weeklyWeather = ref([]);
-const isLoading = ref(true);
+const isLoading = ref(false);
+const locationError = ref(false);
+const weatherError = ref(false);
 
-// YYYYMMDD -> MM/DD 형식으로 변환
+const hasValidCoords = (lat: number, lng: number) => typeof lat === "number" && typeof lng === "number" && !Number.isNaN(lat) && !Number.isNaN(lng) && lat !== 0 && lng !== 0;
+
 const formatDate = (dateStr: string) => {
   if (!dateStr || dateStr.length !== 8) return "";
   return `${dateStr.slice(4, 6)}/${dateStr.slice(6, 8)}`;
 };
 
-// 하늘 상태 코드로 아이콘 클래스 반환
 const getWeatherIconClass = (sky: string) => {
   if (sky === "1") return "icon-sunny";
   if (sky === "3") return "icon-cloudy";
@@ -60,13 +58,24 @@ const getWeatherIconClass = (sky: string) => {
 };
 
 const fetchWeeklyWeather = async (lat: number, lng: number) => {
+  if (!hasValidCoords(lat, lng)) return;
+
+  isLoading.value = true;
+  weatherError.value = false;
+  weeklyWeather.value = [];
+
   try {
     const { baseDate, baseTime } = getVilageFcstBaseDateTime();
 
     const res = await getVilageFcst(lat, lng, baseDate, baseTime);
-    const items = res.response.body.items.item;
+    const raw = res?.response?.body?.items?.item;
+    const items = Array.isArray(raw) ? raw : raw ? [raw] : [];
 
-    // 날짜별 요약
+    if (items.length === 0) {
+      weeklyWeather.value = [];
+      return;
+    }
+
     const daily = Object.values(groupByDate(items)).map(summarizeDay);
     weeklyWeather.value = daily;
   } catch (error) {
@@ -74,23 +83,24 @@ const fetchWeeklyWeather = async (lat: number, lng: number) => {
     weeklyWeather.value = [];
   } finally {
     isLoading.value = false;
+    if (hasValidCoords(lat, lng)) {
+      weatherError.value = weeklyWeather.value.length === 0;
+    }
   }
 };
 
 watch(
-  () => [props.lat, props.lng, props.locationError],
-  () => {
-    // 위치 에러가 있으면 로딩 해제
-    if (props.locationError) {
+  () => [props.lat, props.lng] as const,
+  ([lat, lng]) => {
+    if (!hasValidCoords(lat, lng)) {
+      locationError.value = true;
+      weatherError.value = false;
+      weeklyWeather.value = [];
       isLoading.value = false;
       return;
     }
-
-    // 위치 정보가 있으면 주간 날씨 조회
-    if (props.lat && props.lng) {
-      isLoading.value = true;
-      fetchWeeklyWeather(props.lat, props.lng);
-    }
+    locationError.value = false;
+    fetchWeeklyWeather(lat, lng);
   },
   { immediate: true }
 );
@@ -105,6 +115,7 @@ watch(
 .content-wrapper {
   position: relative;
   min-height: 380px;
+  background-color: ffffffcc;
   width: 100%;
   box-sizing: border-box;
 }
@@ -145,16 +156,22 @@ watch(
   color: #4c6f8f;
 }
 
-.error-message {
+.weekly-error-text {
+  margin: 0;
   padding: 20px 16px;
-  background: #ffffffcc;
-  backdrop-filter: blur(4px);
-  border-radius: 12px;
-  text-align: center;
   font-size: 14px;
   font-weight: 600;
   color: #6b7280;
+  text-align: center;
+  background: #ffffffcc;
+  min-height: 380px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+  border-radius: 12px;
   box-sizing: border-box;
+  box-shadow: 0 4px 12px rgba(29, 76, 122, 0.12);
 }
 
 .section-title {

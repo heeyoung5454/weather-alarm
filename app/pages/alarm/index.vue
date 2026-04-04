@@ -1,28 +1,36 @@
 <template>
   <main class="alarm-page">
     <div class="page-content">
-      <div class="container">
-        <div class="header">
-          <h2 class="header-title">
-            <span class="title-icon" aria-hidden="true">🔔</span>
-            <span>알림</span>
-          </h2>
-          <button class="add-btn" type="button" @click="goToAddAlarm">+</button>
-        </div>
+      <template v-if="isLoggedIn === true">
+        <div class="container">
+          <div class="header">
+            <h2 class="header-title">
+              <span class="title-icon" aria-hidden="true">🔔</span>
+              <span>알림</span>
+            </h2>
+            <button class="add-btn" type="button" @click="goToAddAlarm">+</button>
+          </div>
 
-        <div class="alarm-list">
-          <AlarmItem v-for="alarm in sortedAlarms" :key="alarm.id" :alarm="alarm" @remove="removeAlarm" @persist="persistAlarm" />
-        </div>
+          <div class="alarm-list">
+            <AlarmItem v-for="alarm in sortedAlarms" :key="alarm.id" :alarm="alarm" @remove="removeAlarm" @persist="persistAlarm" />
+          </div>
 
-        <ConfirmDialog
-          :visible="isDeleteDialogOpen"
-          title="알림 삭제"
-          message="삭제하시겠습니까?"
-          confirm-text="확인"
-          cancel-text="취소"
-          @confirm="confirmRemoveAlarm"
-          @cancel="closeDeleteDialog"
-        />
+          <ConfirmDialog
+            :visible="isDeleteDialogOpen"
+            title="알림 삭제"
+            message="삭제하시겠습니까?"
+            confirm-text="확인"
+            cancel-text="취소"
+            @confirm="confirmRemoveAlarm"
+            @cancel="closeDeleteDialog"
+          />
+        </div>
+      </template>
+
+      <LoginRequiredMessage v-else-if="isLoggedIn === false" />
+
+      <div v-else class="container container-loading">
+        <p class="loading-hint">불러오는 중…</p>
       </div>
     </div>
   </main>
@@ -34,6 +42,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { ref, computed, onMounted } from "vue";
 
 import ConfirmDialog from "../../components/ConfirmDialog.vue";
+import LoginRequiredMessage from "../../components/LoginRequiredMessage.vue";
 import AlarmItem from "./components/AlarmItem.vue";
 
 import { usePush } from "../../composables/usePush";
@@ -46,6 +55,7 @@ const { $db, $auth } = useNuxtApp();
 const { fetchRegions } = useRegions();
 
 const alarms = ref<any[]>([]);
+const isLoggedIn = ref<boolean | null>(null);
 
 const timeToMinutes = (t: unknown): number => {
   const [hs, ms] = String(t ?? "00:00").split(":");
@@ -158,7 +168,12 @@ const loadAlarms = async (uid: string) => {
 
 onMounted(() => {
   onAuthStateChanged($auth, async (user) => {
-    if (!user) return;
+    if (!user) {
+      isLoggedIn.value = false;
+      alarms.value = [];
+      return;
+    }
+    isLoggedIn.value = true;
     await fetchRegions();
     await loadAlarms(user.uid);
 
@@ -197,6 +212,18 @@ onMounted(() => {
   border-radius: 24px;
   box-shadow: 0 12px 30px rgba(29, 76, 122, 0.2);
   box-sizing: border-box;
+}
+
+.container-loading {
+  padding: 28px 20px;
+  text-align: center;
+}
+
+.loading-hint {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #4c6f8f;
 }
 
 .header {

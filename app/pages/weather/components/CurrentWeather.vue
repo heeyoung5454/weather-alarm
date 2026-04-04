@@ -2,6 +2,7 @@
   <WeatherSummaryCard
     :loading="isLoading"
     :error-overlay-text="displayLocationError || ''"
+    :weather-error-text="weatherError || ''"
     :location-text="locationText"
     :location-label="regionValue === '' ? '현재 위치' : '내 지역'"
     :region-select-label="regionSelectLabel"
@@ -10,7 +11,11 @@
     :now-date="nowDate"
     :now-time="nowTime"
     :icon-class="getWeatherIcon(weatherList?.sky?.value)"
-    :weather-text="weatherError || weatherList?.sky?.text || ''"
+    :weather-text="
+      weatherList?.pty?.value != null && String(weatherList?.pty?.value) !== '0'
+        ? weatherList?.pty?.text || ''
+        : weatherList?.sky?.text || ''
+    "
     :temperature-text="weatherList?.t1h?.value ? weatherList?.t1h?.value + '°C' : ''"
     @refresh-location="emit('refresh-location')"
     @change-region="emit('change:region', $event)"
@@ -121,7 +126,7 @@ const fetchWeather = async (lat: number, lng: number) => {
 
     // ncst 응답 에러 체크
     if (data.response.header.resultCode !== "00") {
-      weatherError.value = "날씨정보를 확인할수없습니다";
+      weatherError.value = "날씨정보를 불러올 수 없습니다.";
       return;
     }
 
@@ -129,7 +134,7 @@ const fetchWeather = async (lat: number, lng: number) => {
 
     // ncstItems가 배열이고 데이터가 있는지 확인
     if (!Array.isArray(ncstItems) || ncstItems.length === 0) {
-      weatherError.value = "날씨정보를 확인할수없습니다";
+      weatherError.value = "날씨정보를 불러올 수 없습니다.";
       return;
     }
 
@@ -148,7 +153,7 @@ const fetchWeather = async (lat: number, lng: number) => {
 
     // fcst 응답 에러 체크
     if (fcstData.response.header.resultCode !== "00") {
-      weatherError.value = "날씨정보를 확인할수없습니다";
+      weatherError.value = "날씨정보를 불러올 수 없습니다.";
       return;
     }
 
@@ -156,7 +161,7 @@ const fetchWeather = async (lat: number, lng: number) => {
 
     // fcstItems가 배열이고 데이터가 있는지 확인
     if (!Array.isArray(fcstItems) || fcstItems.length === 0) {
-      weatherError.value = "날씨정보를 확인할수없습니다";
+      weatherError.value = "날씨정보를 불러올 수 없습니다.";
       return;
     }
 
@@ -176,7 +181,7 @@ const fetchWeather = async (lat: number, lng: number) => {
     weatherList.value = convertWeatherToObject(ncst, fcst);
     weatherError.value = "";
   } catch (error) {
-    weatherError.value = "날씨정보를 확인할수없습니다";
+    weatherError.value = "날씨정보를 불러올 수 없습니다.";
   } finally {
     isLoading.value = false;
   }

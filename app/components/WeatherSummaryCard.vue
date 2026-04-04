@@ -5,11 +5,15 @@
       <p class="loading-text">{{ loadingText }}</p>
     </div>
 
-    <div v-if="errorOverlayText" class="location-error-full">
+    <div v-else-if="errorOverlayText" class="card-error-overlay">
       {{ errorOverlayText }}
     </div>
 
-    <template v-if="!errorOverlayText">
+    <div v-else-if="weatherErrorText" class="card-error-overlay">
+      {{ weatherErrorText }}
+    </div>
+
+    <template v-else>
       <div class="card-top">
         <div
           v-if="locationText"
@@ -50,7 +54,10 @@ withDefaults(
     temperatureText?: string;
     loading?: boolean;
     loadingText?: string;
+    /** 위치 관련 전체 카드 오버레이 (권한 거부 등) */
     errorOverlayText?: string;
+    /** 날씨 API 실패 등 — 위치 오버레이 다음 우선순위 */
+    weatherErrorText?: string;
     locationText?: string;
     locationLabel?: string;
     interactive?: boolean;
@@ -64,6 +71,7 @@ withDefaults(
     loading: false,
     loadingText: "날씨 정보를 불러오는 중...",
     errorOverlayText: "",
+    weatherErrorText: "",
     locationText: "",
     locationLabel: "현재 위치",
     interactive: true,
@@ -220,7 +228,7 @@ const emit = defineEmits<{
   color: #4c6f8f;
 }
 
-.location-error-full {
+.card-error-overlay {
   position: absolute;
   inset: 0;
   display: flex;

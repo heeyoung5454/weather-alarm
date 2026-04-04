@@ -4,7 +4,8 @@
       <h2 class="panel-title">등록 지역</h2>
     </header>
     <div class="panel-body">
-      <p class="hint" v-if="items.length === 0">저장된 지역이 없습니다. 홈에서 위치를 허용하면 저장됩니다.</p>
+      <p class="hint" v-if="loading">등록 지역을 불러오는 중…</p>
+      <p class="hint" v-else-if="items.length === 0">저장된 지역이 없습니다. 홈에서 위치를 허용하면 저장됩니다.</p>
       <ul v-else class="regions-list">
         <li v-for="r in items" :key="r.key" class="region-item">
           <span class="region-address">{{ r.address }}</span>
@@ -25,6 +26,7 @@
 <script setup lang="ts">
 defineProps<{
   items: { key: string; address: string; savedText: string }[];
+  loading?: boolean;
   disabled: boolean;
 }>();
 

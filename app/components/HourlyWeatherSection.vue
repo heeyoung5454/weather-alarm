@@ -8,7 +8,10 @@
         <p class="loading-text">시간대별 날씨를 불러오는 중...</p>
       </div>
 
-      <div v-if="hourlyForecast.length" ref="chartWrapRef" class="chart-wrap">
+      <p v-else-if="locationError" class="hourly-error-text">위치 권한이 거부되었거나 위치를 가져올 수 없습니다.</p>
+      <p v-else-if="weatherError" class="hourly-error-text">날씨정보를 불러올 수 없습니다.</p>
+
+      <div v-else-if="hourlyForecast.length" ref="chartWrapRef" class="chart-wrap">
         <div class="line-chart" :style="{ width: lineChartWidth + 'px', minWidth: lineChartWidth + 'px' }">
           <svg class="chart-svg" :viewBox="lineChartViewBox" preserveAspectRatio="none">
             <polyline v-if="lineChartPoints" class="chart-line" vector-effect="non-scaling-stroke" :points="lineChartPoints" fill="none" />
@@ -23,7 +26,6 @@
           </article>
         </div>
       </div>
-      <div v-else></div>
     </div>
   </section>
 </template>
@@ -45,7 +47,11 @@ const props = withDefaults(
 );
 
 const isLoading = ref(false);
+const locationError = ref(false);
+const weatherError = ref(false);
 const hourlyForecast = ref<Array<{ time: string; sky: string; temp: string }>>([]);
+
+const hasValidCoords = (lat: number, lng: number) => typeof lat === "number" && typeof lng === "number" && !Number.isNaN(lat) && !Number.isNaN(lng) && lat !== 0 && lng !== 0;
 
 const getWeatherIcon = (sky?: string) => {
   if (sky === "1") return "icon-sunny";
@@ -120,12 +126,13 @@ const lineChartViewBox = computed(() => `0 0 ${lineChartWidth.value} ${CHART_H}`
 const lineChartPoints = computed(() => lineChartCoords.value.map((p) => `${p.x},${p.y}`).join(" "));
 
 const fetchHourlyWeather = async (lat: number, lng: number) => {
-  if (!lat || !lng) {
+  if (!hasValidCoords(lat, lng)) {
     hourlyForecast.value = [];
     return;
   }
 
   isLoading.value = true;
+  weatherError.value = false;
   hourlyForecast.value = [];
 
   try {
@@ -200,17 +207,28 @@ const fetchHourlyWeather = async (lat: number, lng: number) => {
         const mm = String(e.dt.getMinutes()).padStart(2, "0");
         return { time: `${hh}:${mm}`, sky: e.sky, temp: e.tmp };
       });
+  } catch {
+    hourlyForecast.value = [];
   } finally {
     isLoading.value = false;
+    if (hasValidCoords(lat, lng)) {
+      weatherError.value = hourlyForecast.value.length === 0;
+    }
   }
 };
 
 watch(
   () => [props.lat, props.lng] as const,
   ([lat, lng]) => {
-    if (typeof lat === "number" && typeof lng === "number" && lat !== 0 && lng !== 0) {
-      fetchHourlyWeather(lat, lng);
+    if (!hasValidCoords(lat, lng)) {
+      locationError.value = true;
+      weatherError.value = false;
+      hourlyForecast.value = [];
+      isLoading.value = false;
+      return;
     }
+    locationError.value = false;
+    fetchHourlyWeather(lat, lng);
   },
   { immediate: true }
 );
@@ -263,6 +281,22 @@ watch(
   font-size: 14px;
   font-weight: 600;
   color: #4c6f8f;
+}
+
+.hourly-error-text {
+  margin: 0;
+  padding: 20px 16px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  font-weight: 600;
+  color: #6b7280;
+  text-align: center;
+  background: #ffffffd9;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(29, 76, 122, 0.12);
 }
 
 .chart-wrap {

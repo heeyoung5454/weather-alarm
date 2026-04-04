@@ -3,17 +3,17 @@
     <div class="page-content">
       <div v-if="isLoggedIn === true" class="account-stack">
         <UserInfoPanel :email="userEmail" :name="userName" />
-        <RegionsPanel :items="regionPanelItems" :disabled="panelDisabled" @remove="openDeleteRegionDialogByKey" />
+        <RegionsPanel
+          :items="regionPanelItems"
+          :loading="regionsListLoading"
+          :disabled="panelDisabled"
+          @remove="openDeleteRegionDialogByKey"
+        />
         <DevicesPanel :items="devicePanelItems" :disabled="panelDisabled" @remove="openDeleteDeviceDialog" @toggle="toggleDevicePush" />
         <AccountActionsPanel :disabled="panelDisabled" @logout="handleLogout" @withdraw="openWithdrawDialog" />
       </div>
 
-      <div v-else-if="isLoggedIn === false" class="panel">
-        <div class="panel-body">
-          <p class="hint">로그인이 필요합니다.</p>
-          <button type="button" class="back-btn" :disabled="logoutLoading" @click="router.push('/')">홈으로</button>
-        </div>
-      </div>
+      <LoginRequiredMessage v-else-if="isLoggedIn === false" :disabled="logoutLoading || withdrawLoading" />
 
       <div v-else class="panel">
         <div class="panel-body">
@@ -58,7 +58,9 @@
 import { computed, ref, onMounted } from "vue";
 import { collection, deleteDoc, doc, getDoc, getDocs, query, updateDoc, where } from "firebase/firestore";
 import { deleteUser, onAuthStateChanged, signOut } from "firebase/auth";
+import { normalizeFcmTokens } from "../../composables/useUser";
 import ConfirmDialog from "../../components/ConfirmDialog.vue";
+import LoginRequiredMessage from "../../components/LoginRequiredMessage.vue";
 import { formatKoreanAddressLine, getRegionName } from "../../utils/reverseGeo";
 import UserInfoPanel from "./components/UserInfoPanel.vue";
 import RegionsPanel from "./components/RegionsPanel.vue";
@@ -84,6 +86,8 @@ const deleteTargetRegion = ref<any>(null);
 const deleteRegionLoading = ref(false);
 const fcmTokenEntries = ref<any[]>([]);
 const userRegions = ref<any[]>([]);
+/** Firestore `userRegions/{uid}` 읽기 전에는 true — 비어 있음과 구분 */
+const regionsListLoading = ref(false);
 const regionLabelByKey = ref<Record<string, string>>({});
 const regionAddressLoading = ref(false);
 const currentToken = ref("");
@@ -445,10 +449,12 @@ onMounted(() => {
       userRegions.value = [];
       regionLabelByKey.value = {};
       regionAddressLoading.value = false;
+      regionsListLoading.value = false;
       currentToken.value = "";
       return;
     }
 
+    regionsListLoading.value = true;
     isLoggedIn.value = true;
     userEmail.value = user.email ?? "";
     currentToken.value = localStorage.getItem("fcmToken") || "";
@@ -462,13 +468,14 @@ onMounted(() => {
         userName.value = data?.name ?? user.displayName ?? "";
 
         console.log("data", data?.fcmTokens);
-        // 요청대로: 여기서 가공/머지하지 말고 DB의 fcmTokens를 그대로 화면에 표시
-        fcmTokenEntries.value = Array.isArray(data?.fcmTokens) ? data.fcmTokens : [];
+        // 문자열 배열·객체 혼합 등은 saveUser와 동일하게 정규화 후 표시
+        fcmTokenEntries.value = normalizeFcmTokens(data?.fcmTokens);
       } else {
         userName.value = user.displayName ?? "";
         fcmTokenEntries.value = [];
       }
-    } catch {
+    } catch (e) {
+      console.error("account: users 문서 읽기 실패:", e);
       userName.value = user.displayName ?? "";
       fcmTokenEntries.value = [];
     }
@@ -481,8 +488,11 @@ onMounted(() => {
       } else {
         userRegions.value = [];
       }
-    } catch {
+    } catch (e) {
+      console.error("account: userRegions 문서 읽기 실패:", e);
       userRegions.value = [];
+    } finally {
+      regionsListLoading.value = false;
     }
 
     await fetchRegionLabels(userRegions.value);
@@ -838,22 +848,6 @@ onMounted(() => {
   word-break: break-word;
   max-height: 160px;
   overflow: auto;
-}
-
-.back-btn {
-  padding: 12px 14px;
-  border-radius: 999px;
-  border: none;
-  background: #edf2f6;
-  color: #4b5b6a;
-  font-size: 14px;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-.back-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 @media (max-width: 768px) {
