@@ -11,18 +11,23 @@
       <p v-else-if="locationError" class="hourly-error-text">위치 권한이 거부되었거나 위치를 가져올 수 없습니다.</p>
       <p v-else-if="weatherError" class="hourly-error-text">날씨정보를 불러올 수 없습니다.</p>
 
-      <div v-else-if="hourlyForecast.length" ref="chartWrapRef" class="chart-wrap">
+      <div v-else-if="hourlyForecast.length" class="chart-wrap">
         <div class="line-chart" :style="{ width: lineChartWidth + 'px', minWidth: lineChartWidth + 'px' }">
           <svg class="chart-svg" :viewBox="lineChartViewBox" preserveAspectRatio="none">
             <polyline v-if="lineChartPoints" class="chart-line" vector-effect="non-scaling-stroke" :points="lineChartPoints" fill="none" />
+            <text v-for="(pt, i) in lineChartCoords" :key="'t-' + i" class="chart-value-text" vector-effect="non-scaling-stroke" :x="pt.x" :y="pt.labelY" text-anchor="middle">
+              {{ pt.label }}
+            </text>
             <circle v-for="(pt, i) in lineChartCoords" :key="i" class="chart-dot" vector-effect="non-scaling-stroke" :cx="pt.x" :cy="pt.y" r="3" />
           </svg>
         </div>
         <div class="chart-labels" :style="{ width: lineChartWidth + 'px', minWidth: lineChartWidth + 'px' }">
-          <article v-for="slot in hourlyForecast" :key="slot.time" class="hourly-slot" :style="{ width: (hourlyForecast.length ? lineChartWidth / hourlyForecast.length : 44) + 'px' }">
+          <article v-for="(slot, hi) in hourlyForecast" :key="`${hi}-${slot.time}`" class="hourly-slot">
             <p class="hourly-time">{{ slot.time }}</p>
-            <div class="hourly-icon" :class="getWeatherIcon(slot.sky)" aria-hidden="true"></div>
-            <p class="hourly-temp">{{ slot.temp !== "-" ? slot.temp + "°" : "-" }}</p>
+            <div class="hourly-icon" :class="getWeatherIcon(slot.sky, slot.pop)" aria-hidden="true"></div>
+            <div class="hourly-slot-values">
+              <p class="hourly-slot-pop">{{ formatPopLabel(slot.pop) }}</p>
+            </div>
           </article>
         </div>
       </div>
@@ -31,7 +36,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { getUltraSrtFcst, getVilageFcst } from "../composables/useWeather";
 import { getFcstBaseTime, getVilageFcstBaseDateTime } from "../utils/timeConvert";
 
@@ -49,76 +54,234 @@ const props = withDefaults(
 const isLoading = ref(false);
 const locationError = ref(false);
 const weatherError = ref(false);
-const hourlyForecast = ref<Array<{ time: string; sky: string; temp: string }>>([]);
+const hourlyForecast = ref<Array<{ time: string; sky: string; temp: string; pop: string }>>([]);
 
 const hasValidCoords = (lat: number, lng: number) => typeof lat === "number" && typeof lng === "number" && !Number.isNaN(lat) && !Number.isNaN(lng) && lat !== 0 && lng !== 0;
 
-const getWeatherIcon = (sky?: string) => {
+/** 강수확률(%) 이상이면 하늘상태와 무관하게 비 아이콘 */
+const POP_ICON_RAINY_MIN = 60;
+
+const getWeatherIcon = (sky?: string, pop?: string) => {
+  const p = parsePopNum(pop ?? "-");
+  if (p !== null && p >= POP_ICON_RAINY_MIN) return "icon-rainy";
   if (sky === "1") return "icon-sunny";
   if (sky === "3") return "icon-suncloudy";
   if (sky === "4") return "icon-cloudy";
   return "unknown";
 };
 
-const CHART_PAD = 12;
-const CHART_H = 100;
-const chartWrapRef = ref<HTMLElement | null>(null);
-const containerChartWidth = ref(340);
-let resizeObserver: ResizeObserver | null = null;
+const FORECAST_HOURS = 24;
 
-function updateChartWidth() {
-  if (!chartWrapRef.value) return;
-  const padding = 32;
-  containerChartWidth.value = Math.max(300, chartWrapRef.value.clientWidth - padding);
+function normalizeFcstTime(t: string): string {
+  return String(t).padStart(4, "0");
 }
 
-const lineChartWidth = computed(() => containerChartWidth.value);
+function fcstKeyToDate(key: string): Date {
+  const [ds, rawT] = key.split("_");
+  const tt = normalizeFcstTime(rawT);
+  const y = Number(ds.slice(0, 4));
+  const mo = Number(ds.slice(4, 6)) - 1;
+  const d = Number(ds.slice(6, 8));
+  const hh = Number(tt.slice(0, 2));
+  const mm = Number(tt.slice(2, 4));
+  return new Date(y, mo, d, hh, mm);
+}
 
-watch(
-  () => hourlyForecast.value.length,
-  (len) => {
-    if (len === 0) return;
-    nextTick(() => {
-      if (!chartWrapRef.value) return;
-      updateChartWidth();
-      if (resizeObserver) return;
-      resizeObserver = new ResizeObserver(updateChartWidth);
-      resizeObserver.observe(chartWrapRef.value);
-    });
-  },
-  { immediate: true }
-);
+function dateToFcstKey(dt: Date): string {
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const d = String(dt.getDate()).padStart(2, "0");
+  const h = String(dt.getHours()).padStart(2, "0");
+  return `${y}${m}${d}_${h}00`;
+}
 
-onUnmounted(() => {
-  if (chartWrapRef.value && resizeObserver) {
-    resizeObserver.disconnect();
-    resizeObserver = null;
+function formatHHMM(dt: Date): string {
+  return `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`;
+}
+
+function parseTmpNum(s: string): number | null {
+  if (s === "-" || s === "") return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** 단기/초단기 강수확률(%) */
+function parsePopNum(s: string): number | null {
+  if (s === "-" || s === "") return null;
+  const n = parseInt(String(s).trim(), 10);
+  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : null;
+}
+
+function formatPopLabel(pop: string): string {
+  const n = parsePopNum(pop);
+  return n !== null ? `${n}%` : "—";
+}
+
+function buildUltraMap(fcstItems: Array<{ category: string; fcstDate: string; fcstTime: string; fcstValue: string }>) {
+  const byTime = new Map<string, { sky: string; t1h: string; pop: string }>();
+  fcstItems.forEach((item) => {
+    const key = `${item.fcstDate}_${normalizeFcstTime(item.fcstTime)}`;
+    if (!byTime.has(key)) byTime.set(key, { sky: "1", t1h: "-", pop: "-" });
+    const cur = byTime.get(key)!;
+    if (item.category === "SKY") cur.sky = item.fcstValue;
+    if (item.category === "T1H") cur.t1h = item.fcstValue;
+    if (item.category === "POP") cur.pop = item.fcstValue;
+  });
+  return byTime;
+}
+
+type VilageSlot = { dateStr: string; timeStr: string; sky: string; tmp: string; pop: string };
+
+function interpolatedScalar(slot: Date, points: Array<{ dt: Date; n: number }>): number | null {
+  if (points.length === 0) return null;
+  const prev = points.filter((p) => p.dt.getTime() <= slot.getTime()).pop();
+  const next = points.find((p) => p.dt.getTime() >= slot.getTime());
+  if (prev && next && prev.dt.getTime() < slot.getTime() && next.dt.getTime() > slot.getTime()) {
+    const r = (slot.getTime() - prev.dt.getTime()) / (next.dt.getTime() - prev.dt.getTime());
+    return Math.round(prev.n + r * (next.n - prev.n));
   }
-});
+  if (prev && prev.dt.getTime() <= slot.getTime()) return Math.round(prev.n);
+  if (next) return Math.round(next.n);
+  return null;
+}
+
+/**
+ * 단기(3h)·초단기(1h) 병합 후 24시간 1시간 간격. 비어 있는 시각은 인접 예보 온도·강수확률 선형 보간, 하늘은 가까운 시각 값 사용.
+ */
+function mergeHourlyForecast(start: Date, ultraByTime: Map<string, { sky: string; t1h: string; pop: string }>, byTimeVilage: Map<string, VilageSlot>) {
+  const windowEnd = new Date(start.getTime() + FORECAST_HOURS * 60 * 60 * 1000);
+
+  const merged = new Map<string, { sky: string; temp: string; pop: string }>();
+
+  byTimeVilage.forEach((v) => {
+    const fullKey = `${v.dateStr}_${normalizeFcstTime(v.timeStr)}`;
+    const dt = fcstKeyToDate(fullKey);
+    if (dt < start || dt >= windowEnd) return;
+    merged.set(fullKey, { sky: v.sky, temp: v.tmp, pop: v.pop });
+  });
+
+  ultraByTime.forEach((u, key) => {
+    const fullKey = key;
+    const dt = fcstKeyToDate(fullKey);
+    if (dt < start || dt >= windowEnd) return;
+    const ex = merged.get(fullKey);
+    merged.set(fullKey, {
+      sky: u.sky,
+      temp: u.t1h !== "-" ? u.t1h : (ex?.temp ?? "-"),
+      pop: u.pop !== "-" ? u.pop : (ex?.pop ?? "-"),
+    });
+  });
+
+  const numericPoints = Array.from(merged.entries())
+    .map(([k, v]) => {
+      const n = parseTmpNum(v.temp);
+      return { k, dt: fcstKeyToDate(k), sky: v.sky, temp: v.temp, n };
+    })
+    .filter((p): p is typeof p & { n: number } => p.n !== null)
+    .sort((a, b) => a.dt.getTime() - b.dt.getTime());
+
+  const popPoints = Array.from(merged.entries())
+    .map(([k, v]) => ({ dt: fcstKeyToDate(k), n: parsePopNum(v.pop) }))
+    .filter((p): p is { dt: Date; n: number } => p.n !== null)
+    .sort((a, b) => a.dt.getTime() - b.dt.getTime());
+
+  let slot0 = new Date(start);
+  slot0.setMinutes(0, 0, 0);
+  if (slot0.getTime() < start.getTime()) slot0.setHours(slot0.getHours() + 1);
+
+  const out: Array<{ time: string; sky: string; temp: string; pop: string }> = [];
+
+  for (let i = 0; i < FORECAST_HOURS; i++) {
+    const slot = new Date(slot0.getTime() + i * 60 * 60 * 1000);
+    if (slot >= windowEnd) break;
+
+    const slotKey = dateToFcstKey(slot);
+    const hit = merged.get(slotKey);
+
+    let tempStr = "-";
+    let skyStr = "1";
+    let popStr = "-";
+
+    if (hit && parseTmpNum(hit.temp) !== null) {
+      tempStr = hit.temp;
+      skyStr = hit.sky;
+      const directPop = parsePopNum(hit.pop);
+      if (directPop !== null) popStr = String(directPop);
+      else {
+        const ip = interpolatedScalar(slot, popPoints);
+        if (ip !== null) popStr = String(ip);
+      }
+    } else {
+      const prev = numericPoints.filter((p) => p.dt.getTime() <= slot.getTime()).pop();
+      const next = numericPoints.find((p) => p.dt.getTime() >= slot.getTime());
+
+      if (prev && next && prev.dt.getTime() < slot.getTime() && next.dt.getTime() > slot.getTime()) {
+        const r = (slot.getTime() - prev.dt.getTime()) / (next.dt.getTime() - prev.dt.getTime());
+        tempStr = String(Math.round(prev.n + r * (next.n - prev.n)));
+        skyStr = r < 0.5 ? prev.sky : next.sky;
+      } else if (prev && prev.dt.getTime() <= slot.getTime()) {
+        tempStr = String(Math.round(prev.n));
+        skyStr = prev.sky;
+      } else if (next) {
+        tempStr = String(Math.round(next.n));
+        skyStr = next.sky;
+      }
+
+      const ip = interpolatedScalar(slot, popPoints);
+      if (ip !== null) popStr = String(ip);
+    }
+
+    out.push({ time: formatHHMM(slot), sky: skyStr, temp: tempStr, pop: popStr });
+  }
+
+  return out;
+}
+
+const CHART_PAD = 12;
+/** 그래프 선이 그려지는 세로 구간 (라벨 영역 제외) */
+const CHART_DRAW_H = 100;
+/** 선 위 온도 숫자용 상단 여백 */
+const CHART_LABEL_TOP = 16;
+const CHART_H = CHART_LABEL_TOP + CHART_DRAW_H;
+/** Y축 최소 구간(°C) — 좁은 변화폭도 완만하게 보이도록 */
+const CHART_MIN_TEMP_SPAN = 7;
+/** 라벨 열 너비 — 그래프 가로 스케일과 동일 */
+const HOURLY_SLOT_PX = 44;
+
+const lineChartWidth = computed(() => hourlyForecast.value.length * HOURLY_SLOT_PX);
 
 const hourlyTempRange = computed(() => {
   const temps = hourlyForecast.value.map((s) => (s.temp !== "-" ? Number(s.temp) : null)).filter((n): n is number => n !== null);
   if (temps.length === 0) return { min: 0, max: 1 };
-  const min = Math.min(...temps);
-  const max = Math.max(...temps);
-  const padding = max === min ? 2 : 0;
-  return { min: min - padding, max: max + padding };
+  const dataMin = Math.min(...temps);
+  const dataMax = Math.max(...temps);
+  const span = dataMax - dataMin;
+  if (span === 0) {
+    const pad = 2;
+    return { min: dataMin - pad, max: dataMax + pad };
+  }
+  const extra = Math.max(0, (CHART_MIN_TEMP_SPAN - span) / 2);
+  const ratioPad = span * 0.12;
+  const pad = Math.max(extra, ratioPad, 0.5);
+  return { min: dataMin - pad, max: dataMax + pad };
 });
 
 const lineChartCoords = computed(() => {
   const list = hourlyForecast.value;
-  const w = lineChartWidth.value;
   const { min, max } = hourlyTempRange.value;
   const range = max - min || 1;
-  const n = list.length;
-  if (n === 0) return [];
-  const colWidth = w / n;
+  const innerH = CHART_DRAW_H - CHART_PAD * 2;
+  if (list.length === 0) return [];
+  const colWidth = HOURLY_SLOT_PX;
   return list.map((slot, i) => {
     const x = (i + 0.5) * colWidth;
-    const temp = slot.temp !== "-" ? Number(slot.temp) : min;
+    const hasTemp = slot.temp !== "-";
+    const temp = hasTemp ? Number(slot.temp) : min;
     const ratio = (temp - min) / range;
-    const y = CHART_H - CHART_PAD - ratio * (CHART_H - CHART_PAD * 2);
-    return { x, y };
+    const y = CHART_LABEL_TOP + CHART_DRAW_H - CHART_PAD - ratio * innerH;
+    const label = hasTemp ? String(Math.round(Number(slot.temp))) + "°" : "—";
+    const labelY = y - 8;
+    return { x, y, label, labelY };
   });
 });
 
@@ -137,36 +300,42 @@ const fetchHourlyWeather = async (lat: number, lng: number) => {
 
   try {
     const { fctBaseDate, fctBaseTime } = getFcstBaseTime();
-    const fcstData = await getUltraSrtFcst(lat, lng, fctBaseDate, fctBaseTime);
-    const fcstItems = fcstData?.response?.body?.items?.item ?? [];
+    const fcstData = await getUltraSrtFcst(lat, lng, fctBaseDate, fctBaseTime, { numOfRows: 500 });
+    const rawItems = fcstData?.response?.body?.items?.item ?? [];
+    const fcstItems = Array.isArray(rawItems) ? rawItems : rawItems ? [rawItems] : [];
+    const ultraByTime = buildUltraMap(fcstItems as Array<{ category: string; fcstDate: string; fcstTime: string; fcstValue: string }>);
+    const start = new Date();
 
     let vilageItems: Array<{ category: string; fcstDate: string; fcstTime: string; fcstValue: string }> = [];
     try {
       const { baseDate: vDate, baseTime: vTime } = getVilageFcstBaseDateTime();
       const vilageRes = await getVilageFcst(lat, lng, vDate, vTime);
       if (vilageRes?.response?.body?.items?.item) {
-        vilageItems = vilageRes.response.body.items.item;
+        const v = vilageRes.response.body.items.item;
+        vilageItems = Array.isArray(v) ? v : [v];
       }
     } catch {
-      const byTime = new Map<string, { sky: string; t1h: string }>();
-      (fcstItems as Array<{ category: string; fcstDate: string; fcstTime: string; fcstValue: string }>).forEach((item) => {
-        const key = `${item.fcstDate}_${item.fcstTime}`;
-        if (!byTime.has(key)) byTime.set(key, { sky: "1", t1h: "-" });
-        const cur = byTime.get(key)!;
-        if (item.category === "SKY") cur.sky = item.fcstValue;
-        if (item.category === "T1H") cur.t1h = item.fcstValue;
-      });
-      const sortedKeys = Array.from(byTime.keys()).sort();
+      const windowEnd = new Date(start.getTime() + FORECAST_HOURS * 60 * 60 * 1000);
+      const sortedKeys = Array.from(ultraByTime.keys())
+        .sort()
+        .filter((key) => {
+          const dt = fcstKeyToDate(key);
+          return dt >= start && dt < windowEnd;
+        });
       hourlyForecast.value = sortedKeys.map((key) => {
-        const [, time] = key.split("_");
-        const t = byTime.get(key)!;
-        const timeStr = time.length >= 4 ? `${time.slice(0, 2)}:${time.slice(2, 4)}` : time;
-        return { time: timeStr, sky: t.sky, temp: t.t1h };
+        const dt = fcstKeyToDate(key);
+        const u = ultraByTime.get(key)!;
+        return {
+          time: formatHHMM(dt),
+          sky: u.sky,
+          temp: u.t1h,
+          pop: u.pop !== "-" ? u.pop : "-",
+        };
       });
       return;
     }
 
-    const byTimeVilage = new Map<string, { dateStr: string; timeStr: string; sky: string; tmp: string }>();
+    const byTimeVilage = new Map<string, VilageSlot>();
     vilageItems.forEach((item) => {
       const key = `${item.fcstDate}_${item.fcstTime}`;
       const timeStr = item.fcstTime.padStart(4, "0");
@@ -176,37 +345,16 @@ const fetchHourlyWeather = async (lat: number, lng: number) => {
           timeStr,
           sky: "1",
           tmp: "-",
+          pop: "-",
         });
       }
       const cur = byTimeVilage.get(key)!;
       if (item.category === "SKY") cur.sky = item.fcstValue;
       if (item.category === "TMP") cur.tmp = item.fcstValue;
+      if (item.category === "POP") cur.pop = item.fcstValue;
     });
 
-    const start = new Date();
-    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
-    const entries: Array<{ dt: Date; sky: string; tmp: string }> = [];
-
-    byTimeVilage.forEach((v) => {
-      const y = Number(v.dateStr.slice(0, 4));
-      const m = Number(v.dateStr.slice(4, 6)) - 1;
-      const d = Number(v.dateStr.slice(6, 8));
-      const hh = Number(v.timeStr.slice(0, 2));
-      const mm = Number(v.timeStr.slice(2, 4));
-      const dt = new Date(y, m, d, hh, mm);
-      if (dt >= start && dt < end) {
-        entries.push({ dt, sky: v.sky, tmp: v.tmp });
-      }
-    });
-
-    entries.sort((a, b) => a.dt.getTime() - b.dt.getTime());
-    hourlyForecast.value = entries
-      .filter((e) => e.dt.getMinutes() === 0 && e.dt.getHours() % 3 === 0)
-      .map((e) => {
-        const hh = String(e.dt.getHours()).padStart(2, "0");
-        const mm = String(e.dt.getMinutes()).padStart(2, "0");
-        return { time: `${hh}:${mm}`, sky: e.sky, temp: e.tmp };
-      });
+    hourlyForecast.value = mergeHourlyForecast(start, ultraByTime, byTimeVilage);
   } catch {
     hourlyForecast.value = [];
   } finally {
@@ -338,6 +486,15 @@ watch(
   stroke-linejoin: round;
 }
 
+.chart-value-text {
+  fill: #1e5f96;
+  font-size: 11px;
+  font-weight: 700;
+  paint-order: stroke fill;
+  stroke: #fff;
+  stroke-width: 3px;
+}
+
 .chart-dot {
   fill: #2c83c9;
   stroke: #fff;
@@ -386,10 +543,24 @@ watch(
   background: url("@/assets/images/icon-suncloudy.png") no-repeat center center / contain;
 }
 
-.hourly-temp {
+.hourly-icon.icon-rainy {
+  background: url("@/assets/images/icon-rainy.png") no-repeat center center / contain;
+}
+
+.hourly-slot-values {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-height: 2.5em;
+  justify-content: flex-start;
+}
+
+.hourly-slot-pop {
   margin: 0;
-  font-size: 12px;
-  font-weight: 700;
-  color: #254f75;
+  font-size: 10px;
+  font-weight: 600;
+  color: #5b8ab8;
+  line-height: 1.2;
 }
 </style>

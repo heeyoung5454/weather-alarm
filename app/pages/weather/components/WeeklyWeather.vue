@@ -31,19 +31,33 @@ import { ref, watch } from "vue";
 
 import { getVilageFcst } from "@/composables/useWeather";
 import { getVilageFcstBaseDateTime } from "@/utils/timeConvert";
-import { groupByDate, summarizeDay } from "@/utils/forecast";
+import { groupByDate, summarizeDay, type ForecastItem } from "@/utils/forecast";
+
+type DaySummary = {
+  date: string;
+  minTemp: number;
+  maxTemp: number;
+  sky: string;
+  pop: number;
+};
 
 const props = defineProps<{
   lat: number;
   lng: number;
 }>();
 
-const weeklyWeather = ref([]);
+const weeklyWeather = ref<DaySummary[]>([]);
 const isLoading = ref(false);
 const locationError = ref(false);
 const weatherError = ref(false);
 
 const hasValidCoords = (lat: number, lng: number) => typeof lat === "number" && typeof lng === "number" && !Number.isNaN(lat) && !Number.isNaN(lng) && lat !== 0 && lng !== 0;
+
+/** 로컬 기준 오늘 날짜 YYYYMMDD (단기예보 fcstDate와 동일 형식) */
+function todayYmd(): string {
+  const n = new Date();
+  return `${n.getFullYear()}${String(n.getMonth() + 1).padStart(2, "0")}${String(n.getDate()).padStart(2, "0")}`;
+}
 
 const formatDate = (dateStr: string) => {
   if (!dateStr || dateStr.length !== 8) return "";
@@ -57,6 +71,31 @@ const getWeatherIconClass = (sky: string) => {
   return "";
 };
 
+/** 단기예보는 totalCount가 numOfRows보다 크면 다음 페이지에 이어짐 — 한 페이지만 받으면 뒤쪽 날짜가 잘림 */
+async function fetchAllVilageFcstItems(lat: number, lng: number, baseDate: string, baseTime: string): Promise<ForecastItem[]> {
+  const numOfRows = 1000;
+  let pageNo = 1;
+  const all: ForecastItem[] = [];
+
+  while (true) {
+    const res = await getVilageFcst(lat, lng, baseDate, baseTime, { numOfRows, pageNo });
+    const body = res?.response?.body;
+    const raw = body?.items?.item;
+    const chunk = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    all.push(...chunk);
+
+    const totalCount = Number(body?.totalCount);
+    const hasTotal = Number.isFinite(totalCount) && totalCount > 0;
+    if (chunk.length === 0) break;
+    if (hasTotal && all.length >= totalCount) break;
+    if (!hasTotal && chunk.length < numOfRows) break;
+    pageNo += 1;
+    if (pageNo > 30) break;
+  }
+
+  return all;
+}
+
 const fetchWeeklyWeather = async (lat: number, lng: number) => {
   if (!hasValidCoords(lat, lng)) return;
 
@@ -67,17 +106,20 @@ const fetchWeeklyWeather = async (lat: number, lng: number) => {
   try {
     const { baseDate, baseTime } = getVilageFcstBaseDateTime();
 
-    const res = await getVilageFcst(lat, lng, baseDate, baseTime);
-    const raw = res?.response?.body?.items?.item;
-    const items = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    const items = await fetchAllVilageFcstItems(lat, lng, baseDate, baseTime);
 
     if (items.length === 0) {
       weeklyWeather.value = [];
       return;
     }
 
-    const daily = Object.values(groupByDate(items)).map(summarizeDay);
-    weeklyWeather.value = daily;
+    const grouped = groupByDate(items);
+    const daily: DaySummary[] = Object.keys(grouped)
+      .sort()
+      .map((dateKey) => summarizeDay(grouped[dateKey]));
+
+    const today = todayYmd();
+    weeklyWeather.value = daily.filter((d) => d.date > today).slice(0, 6);
   } catch (error) {
     console.error("주간 날씨 조회 실패:", error);
     weeklyWeather.value = [];

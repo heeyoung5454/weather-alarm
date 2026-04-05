@@ -419,6 +419,17 @@ const onHomeRegionChange = async (key: string) => {
   if (e && typeof e.lat === "number" && typeof e.lng === "number") {
     position.value = { lat: e.lat, lng: e.lng };
     locationError.value = "";
+
+    const user = $auth.currentUser;
+    if (user) {
+      try {
+        const token = localStorage.getItem("fcmToken") || "";
+        await saveUser(user, token, { lat: e.lat, lng: e.lng });
+        await loadUserRegions(user.uid);
+      } catch (err) {
+        console.error("내 지역 선택 후 users 위치 저장 실패:", err);
+      }
+    }
   }
 };
 

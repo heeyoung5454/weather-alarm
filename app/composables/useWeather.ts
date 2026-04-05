@@ -38,18 +38,24 @@ export const getUltraSrtNcstByGrid = async (nx: number, ny: number, base_date: s
  * @param base_time
  * @returns
  */
-export const getUltraSrtFcst = async (lat: number, lng: number, base_date: string, base_time: string) => {
+export const getUltraSrtFcst = async (
+  lat: number,
+  lng: number,
+  base_date: string,
+  base_time: string,
+  options?: { numOfRows?: number }
+) => {
   const grid = dfs_xy_conv("toXY", lat, lng);
-  return getUltraSrtFcstByGrid(grid.x, grid.y, base_date, base_time);
+  return getUltraSrtFcstByGrid(grid.x, grid.y, base_date, base_time, options?.numOfRows ?? 50);
 };
 
 /** 격자 좌표(nx, ny)로 초단기예보 조회 - regions 의 x, y 사용 시 */
-export const getUltraSrtFcstByGrid = async (nx: number, ny: number, base_date: string, base_time: string) => {
+export const getUltraSrtFcstByGrid = async (nx: number, ny: number, base_date: string, base_time: string, numOfRows = 50) => {
   const config = useRuntimeConfig();
   return $fetch("https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtFcst", {
     params: {
       serviceKey: config.public.weatherKey,
-      numOfRows: 50,
+      numOfRows,
       pageNo: 1,
       dataType: "JSON",
       base_date,
@@ -68,7 +74,13 @@ export const getUltraSrtFcstByGrid = async (nx: number, ny: number, base_date: s
  * @param base_time
  * @returns
  */
-export const getVilageFcst = async (lat: number, lng: number, base_date: string, base_time: string) => {
+export const getVilageFcst = async (
+  lat: number,
+  lng: number,
+  base_date: string,
+  base_time: string,
+  options?: { numOfRows?: number; pageNo?: number }
+) => {
   const config = useRuntimeConfig();
 
   const grid = dfs_xy_conv("toXY", lat, lng);
@@ -76,8 +88,8 @@ export const getVilageFcst = async (lat: number, lng: number, base_date: string,
   const res = await $fetch("https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst", {
     params: {
       serviceKey: config.public.weatherKey,
-      numOfRows: 1000,
-      pageNo: 1,
+      numOfRows: options?.numOfRows ?? 1000,
+      pageNo: options?.pageNo ?? 1,
       dataType: "JSON",
       base_date,
       base_time,
