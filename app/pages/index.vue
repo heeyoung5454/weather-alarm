@@ -1,8 +1,9 @@
 <template>
   <main class="page">
     <div class="page-content">
-      <div class="home-top-bar" v-if="isLoggedIn === false">
-        <button type="button" class="home-login-btn" :disabled="loginLoading" @click="openConsentModal">로그인</button>
+      <div class="home-top-bar">
+        <button v-if="isLoggedIn === false" type="button" class="home-login-btn" :disabled="loginLoading" @click="openConsentModal">로그인</button>
+        <TtsPlayButton :text="homeTtsMessage" :disabled="homeTtsDisabled" />
       </div>
 
       <WeatherSummaryCard
@@ -59,6 +60,7 @@ import InfoTooltip from "../components/InfoTooltip.vue";
 import AirQualityCard from "../components/AirQualityCard.vue";
 import HourlyWeatherSection from "../components/HourlyWeatherSection.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
+import TtsPlayButton from "../components/TtsPlayButton.vue";
 
 import { ref, onMounted, watch, computed, onBeforeUnmount } from "vue";
 import { doc, getDoc, setDoc } from "firebase/firestore";
@@ -459,6 +461,25 @@ const airLoading = ref(false);
 const airError = ref("");
 const airSummary = ref<AirQualitySummary | null>(null);
 
+const homeTtsHasCoords = computed(() => {
+  const { lat, lng } = position.value;
+  return typeof lat === "number" && typeof lng === "number" && !(lat === 0 && lng === 0);
+});
+
+const homeTtsDisabled = computed(
+  () => weatherLoading.value || !!locationError.value || !!weatherError.value || !homeTtsHasCoords.value
+);
+
+const homeTtsMessage = computed(() => {
+  const sky = weatherList.value?.sky?.text ?? "알 수 없음";
+  const tempRaw = weatherList.value?.t1h?.value;
+  const tempSpeak = typeof tempRaw === "string" && tempRaw !== "" ? `${tempRaw}도` : weatherList.value?.t1h?.text ?? "알 수 없음";
+  const dust = airSummary.value?.gradePm10 ?? "정보 없음";
+  const fine = airSummary.value?.gradePm25 ?? "정보 없음";
+  const location = (weatherLocationText.value || "").trim() || "현재 위치";
+  return `오늘 ${location} 날씨는 ${sky}이고, 기온은 ${tempSpeak}입니다. 미세먼지는 ${dust} 수준, 초미세먼지는 ${fine} 수준입니다.`.replace(/\s+/g, " ").trim();
+});
+
 const loadAirQuality = async () => {
   if (!hasAirKoreaKey.value) return;
   const { lat, lng } = position.value;
@@ -781,6 +802,8 @@ const startAlarm = async () => {
   display: flex;
   justify-content: flex-end;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   min-height: 28px;
   margin: -4px 0 0;
 }

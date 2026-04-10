@@ -7,6 +7,7 @@
             <path d="M19 12H5M5 12l7 7m-7-7l7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </NuxtLink>
+        <TtsPlayButton v-if="regionCoords" :text="ttsMessage" :disabled="isLoading || !!weatherError" />
       </div>
 
       <template v-if="!regionCoords && !locationLoading">
@@ -52,6 +53,7 @@ import AirQualityCard from "../../components/AirQualityCard.vue";
 import HourlyWeatherSection from "../../components/HourlyWeatherSection.vue";
 import WeatherSummaryCard from "../../components/WeatherSummaryCard.vue";
 import WeeklyWeather from "../weather/components/WeeklyWeather.vue";
+import TtsPlayButton from "../../components/TtsPlayButton.vue";
 
 const route = useRoute();
 const { regionsByName, fetchRegions } = useRegions();
@@ -98,6 +100,18 @@ const hasAirKoreaKey = computed(() => !!String(config.public.airKoreaKey || "").
 const airLoading = ref(false);
 const airError = ref("");
 const airSummary = ref<AirQualitySummary | null>(null);
+
+/** TtsPlayButton → useTTS.speak(text)에 전달 */
+const ttsMessage = computed(() => {
+  const sky = weatherList.value?.sky?.text ?? "알 수 없음";
+  const tempRaw = weatherList.value?.t1h?.value;
+  const tempSpeak = typeof tempRaw === "string" && tempRaw !== "" ? `${tempRaw}도` : (weatherList.value?.t1h?.text ?? "알 수 없음");
+  const dust = airSummary.value?.gradePm10 ?? "정보 없음";
+  const fine = airSummary.value?.gradePm25 ?? "정보 없음";
+  const location = locationDisplayText.value;
+
+  return `오늘 ${location} 날씨는 ${sky}이고, 기온은 ${tempSpeak}입니다. 미세먼지는 ${dust}, 초미세먼지는 ${fine} 입니다.`.replace(/\s+/g, " ").trim();
+});
 
 const loadAirQuality = async () => {
   if (!hasAirKoreaKey.value) return;
@@ -300,4 +314,5 @@ watch(
   flex-direction: column;
   gap: 24px;
 }
+
 </style>
